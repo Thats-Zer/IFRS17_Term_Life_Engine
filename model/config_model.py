@@ -40,6 +40,10 @@ class ConfigModel(BaseModel):
 
     excel_output: bool = Field (default=True, description="Flag to indicate if Excel output is required")
     output_path: str = Field (default="output/ifrs17_results.xlsx", description="Path for the Excel output file")
+
+    mortality_table_path: str = "data/mortality_table.csv"
+    use_mortality_table: bool = True
+    
     
     @field_validator('max_issue_age') 
     @classmethod
