@@ -1,0 +1,2 @@
+# IFRS17_Term_Life_Engine
+A modular IFRS 17 and Solvency II actuarial valuation engine for term-life insurance products.  This project performs mortality and lapse projections, premium valuation, discounted cash flow analysis, Best Estimate Liability (BEL), Risk Adjustment (RA), Contractual Service Margin (CSM), and onerous contract testing under IFRS 17 principles.  Built with a scalable architecture using Python, Pandas, NumPy, and Pydantic.
