@@ -30,6 +30,8 @@
     "counterparty_pd": 0.005,
     "counterparty_lgd": 0.6,
 
+    "mortality_table_path": "mortality_table.csv",
+
     "excel_output": true,
     "output_path": "output/ifrs17_results.xlsx"
 

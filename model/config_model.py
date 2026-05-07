@@ -1,6 +1,7 @@
 from pydantic import BaseModel, Field, field_validator
 
-class model_config(BaseModel):
+
+class ConfigModel(BaseModel):
     n_policies: int= Field (default=1000, description="Number of policies to simulate")
     projection_years: int= Field (default=10, gt=0, description="Number of years to project")
     random_seeds: int=42
@@ -32,6 +33,11 @@ class model_config(BaseModel):
     counterparty_pd: float = Field (default=0.005, ge=0, le=1, description="Counterparty probability of default")
     counterparty_lgd: float = Field (default=0.6, ge=0, le=1, description="Counterparty loss given default")
 
+    mortality_table_path: str = Field(
+        default="mortality_table.csv",
+        description="Path to the mortality table CSV file",
+    )
+
     excel_output: bool = Field (default=True, description="Flag to indicate if Excel output is required")
     output_path: str = Field (default="output/ifrs17_results.xlsx", description="Path for the Excel output file")
     
@@ -42,3 +48,10 @@ class model_config(BaseModel):
         if min_age is not None and max_issue_age < min_age:
             raise ValueError("max_issue_age must be greater than or equal to min_issue_age")
         return max_issue_age
+
+
+# Backward-compatible alias for earlier imports.
+model_config = ConfigModel
+
+# Backward-compatible alias for the user's preferred naming.
+ModelConfig = ConfigModel
