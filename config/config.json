@@ -1,0 +1,36 @@
+{
+    "n_policies": 10000,
+    "projection_years": 10,
+    "random_seed": 42,
+
+    "target_avg_sum_assured": 50000,
+    "min_issue_age": 18,
+    "max_issue_age": 55,
+
+    "discount_rate": 0.05,
+    "tax_rate": 0.20,
+    "premium_margin": 1.2,
+
+    "inflation_rate": 0.05,
+    "unit_cost": 1000,
+
+    "base_mort_rate": 0.001,
+    "mortality_age_factor": 0.0001,
+
+    "mortality_shock": 0.0005,
+
+    "lapse_decay": 0.15,
+    "lapse_base_rate": 0.10,
+
+    "coc_ratio": 0.05,
+    "s2_margin": 0.25,
+    "op_risk_ratio": 0.02,
+
+    "reinsurance_cost": 0.4,
+    "counterparty_pd": 0.005,
+    "counterparty_lgd": 0.6,
+
+    "excel_output": true,
+    "output_path": "output/ifrs17_results.xlsx"
+
+}
