@@ -30,11 +30,22 @@
     "counterparty_pd": 0.005,
     "counterparty_lgd": 0.6,
 
+    "confidence_level": 0.95,
+    "n_risk_scenarios": 1000,
+    "acquisition_cost": 500,
+    "admin_cost_per_policy": 100,
+    "collection_cost_rate": 0.02,
+    "maintenance_cost_per_policy": 50,
+    "reinsurance_cost_rate": 0.4,
+    "surrender_charge_rate": 0.1,
+    "profit_margin": 0.2,
+    "contingency_loading": 0.05,
 
     "excel_output": true,
     "output_path": "output/ifrs17_results.xlsx",
 
     "mortality_table_path": "data/mortality_table.csv",
-    "use_mortality_table": true
+    "use_mortality_table": true,
+    "run_scenarios": true
 
 }

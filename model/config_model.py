@@ -4,7 +4,7 @@ from pydantic import BaseModel, Field, field_validator
 class ConfigModel(BaseModel):
     n_policies: int= Field (default=1000, description="Number of policies to simulate")
     projection_years: int= Field (default=10, gt=0, description="Number of years to project")
-    random_seeds: int=42
+    random_seed: int=42
     
     target_avg_sum_assured : float= Field (default=50000, gt=0, 
                                            description="Target average sum assured for the policies")
@@ -34,15 +34,36 @@ class ConfigModel(BaseModel):
     counterparty_lgd: float = Field (default=0.6, ge=0, le=1, description="Counterparty loss given default")
 
     mortality_table_path: str = Field(
-        default="mortality_table.csv",
+        default="data/mortality_table.csv",
         description="Path to the mortality table CSV file",
     )
 
+    use_mortality_table: bool = Field(
+        default=True,
+        description="Flag to indicate whether mortality should be read from table",
+    )
+
+    run_scenarios: bool = Field(
+        default=True,
+        description="Flag to indicate whether scenario analysis should be executed",
+    )
+
+
+    confidence_level: float = Field (default=0.95, ge=0.5, le=1, description="Confidence level for the risk adjustment")
+    n_risk_scenarios: int = Field (default=1000, gt=0, description="Number of risk scenarios to simulate for risk adjustment")
+    acquisition_cost: float = Field (default=500.0, gt=0, description="Acquisition cost per policy")
+    admin_cost_per_policy: float = Field (default=100.0, gt=0, description="Administrative cost per policy")
+    collection_cost_rate: float = Field (default=0.02, gt=0, description="Collection cost as a percentage of premium")
+    maintenance_cost_per_policy: float = Field (default=50.0, gt=0, description="Maintenance cost per policy")
+    reinsurance_cost_rate: float = Field (default=0.4, gt=0, description="Reinsurance cost as a percentage of premium")
+    surrender_charge_rate: float = Field (default=0.1, gt=0, description="Surrender charge as a percentage of sum assured")
+    profit_margin: float = Field (default=0.2, gt=0, description="Profit margin as a percentage of premium")
+    contingency_loading: float = Field (default=0.05, gt=0, description="Contingency loading as a percentage of premium")
+
+
+
     excel_output: bool = Field (default=True, description="Flag to indicate if Excel output is required")
     output_path: str = Field (default="output/ifrs17_results.xlsx", description="Path for the Excel output file")
-
-    mortality_table_path: str = "data/mortality_table.csv"
-    use_mortality_table: bool = True
     
     
     @field_validator('max_issue_age') 
