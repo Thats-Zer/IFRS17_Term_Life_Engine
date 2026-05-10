@@ -27,7 +27,8 @@ Bu proje, **term life (vadeli hayat)** sigortası ürünleri için IFRS 17 prens
 Windows PowerShell:
 
 ```powershell
-cd "C:\Users\sevva\Desktop\BUSEFERSON\IFRS17_Term_Life_Engine"
+git clone https://github.com/Thats-Zer/IFRS17_Term_Life_Engine.git
+cd "IFRS17_Term_Life_Engine"
 python -m pip install -r requirements
 ```
 
@@ -78,7 +79,8 @@ This project is a modular Python valuation engine for **term-life insurance** al
 
 ### Installation
 ```powershell
-cd "C:\Users\sevva\Desktop\BUSEFERSON\IFRS17_Term_Life_Engine"
+git clone https://github.com/Thats-Zer/IFRS17_Term_Life_Engine.git
+cd "IFRS17_Term_Life_Engine"
 python -m pip install -r requirements
 ```
 

@@ -25,7 +25,8 @@ This project is a modular Python valuation engine for **term-life insurance**, d
 Windows PowerShell:
 
 ```powershell
-cd "C:\Users\sevva\Desktop\BUSEFERSON\IFRS17_Term_Life_Engine"
+git clone https://github.com/Thats-Zer/IFRS17_Term_Life_Engine.git
+cd "IFRS17_Term_Life_Engine"
 python -m pip install -r requirements
 ```
 
