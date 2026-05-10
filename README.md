@@ -1,6 +1,6 @@
 # IFRS 17 Term Life Engine
 
-## Overview
+## Overview+
 This project is a modular Python valuation engine for **term-life insurance**, designed around core IFRS 17 concepts. It produces:
 
 - **Projection (Policy × Year)**: age-year grid, mortality, lapse, and survival rates
