@@ -192,7 +192,7 @@ def create_master_data(config: ModelConfig) -> pd.DataFrame:
             config.min_issue_age,
             config.max_issue_age + 1,
             size=config.n_policies,
-            dtype=np.int8
+            dtype=np.int16
         ),
         "sum_assured": np.random.lognormal(
             mean=np.log(config.target_avg_sum_assured),
@@ -247,14 +247,14 @@ def create_year_age_grid(
     # Current age hesapla
     grid["current_age"] = (
         grid["issue_age"].astype(np.int16) + grid["Year"].astype(np.int16) - 1
-    ).astype(np.int8)
+    ).astype(np.int16)
     
     # Veri tipi optimizasyonu
     grid = grid.astype({
         "policy_id": np.int32,
         "Year": np.int32,
-        "current_age": np.int8,
-        "issue_age": np.int8
+        "current_age": np.int16,
+        "issue_age": np.int16
     })
     
     # NaN kontrolü
@@ -376,22 +376,24 @@ def attach_mortality_and_lapse(
     # SURVIVAL PROBABILITY (KÜMÜLATIF)
     # ===============================================
     
-    # Yıl içi survival: 1 - qx - lapse
+    # Yıl içi survival (two-decrement approximation): (1 - qx) * (1 - lapse)
+    # Bu, 1 - qx - lapse formülüne göre daha tutarlı bir birleşik decrement yaklaşımıdır.
     projection["survival_multiplier"] = (
-        (1 - projection["qx"] - projection["lapse_rate"])
+        (1 - projection["qx"]) * (1 - projection["lapse_rate"])
         .clip(0, 1)
         .astype(np.float32)
     )
-    
-    # Kümülatif survival: S(t) = S(t-1) × survival_multiplier(t)
+
+    # Kümülatif survival (opening): S_open(t) = ∏_{i=1..t-1} survival_multiplier(i)
+    # Böylece Year=t satırındaki survival_ratio, yıl başındaki in-force oranını temsil eder.
     projection = projection.sort_values(["policy_id", "Year"]).reset_index(drop=True)
-    
+
+    g = projection.groupby("policy_id", sort=False)
+    projection["survival_multiplier_opening"] = (
+        g["survival_multiplier"].shift(1).fillna(1.0).astype(np.float32)
+    )
     projection["survival_ratio"] = (
-        projection
-        .groupby("policy_id", sort=False)["survival_multiplier"]
-        .cumprod()
-        .astype(np.float32)
-        .reset_index(drop=True)
+        g["survival_multiplier_opening"].cumprod().astype(np.float32).reset_index(drop=True)
     )
     
     # NaN handling

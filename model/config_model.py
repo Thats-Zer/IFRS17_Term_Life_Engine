@@ -1,82 +1,150 @@
 from pydantic import BaseModel, Field, field_validator
+#integer veri tipi sadece tam sayıları temsil ederken, float veri tipi ondalık sayıları temsil eder.
+#boolean veri tipi True veya False değerlerini temsil ederken, string veri tipi metin verilerini temsil eder.
+#ge=0 ifadesi, ilgili alanın değerinin 0 veya daha büyük olması gerektiğini belirtir.
+# Bu, negatif değerlerin kabul edilmemesi gerektiği durumlarda kullanılır.
 
+#gt=0 ifadesi, ilgili alanın değerinin 0'den büyük olması gerektiğini belirtir.
+# Bu, sıfırın kabul edilmediği durumlarda kullanılır.
 
 class ConfigModel(BaseModel):
     n_policies: int= Field (default=1000, description="Number of policies to simulate")
+    #simüle edilecek poliçe sayısını belirtir. Bu, modelin ne kadar büyük bir veri seti üzerinde çalışacağını belirler.
+    
     projection_years: int= Field (default=10, gt=0, description="Number of years to project")
+    #projeksiyon yılını belirtir. Bu, modelin ne kadar uzun bir süre için projeksiyon yapacağını belirler.
+    
     random_seed: int=42
+    #rastgele sayı üreteci için kullanılan başlangıç değerini belirtir. Bu, modelin her çalıştırıldığında aynı sonuçları üretmesini sağlar.
     
     target_avg_sum_assured : float= Field (default=50000, gt=0, 
                                            description="Target average sum assured for the policies")
+    #policelerin ortalama teminat tutarını belirtir. Bu, modelin oluşturduğu poliçelerin ne kadar teminat sağladığını belirler.
+
     min_issue_age: int = Field (default=18, ge=0, description="Minimum issue age for the policies")
+    #policelerin minimum başlangıç yaşını belirtir. Bu, modelin oluşturduğu poliçelerin hangi yaş aralığında olduğunu belirler.
+    
     max_issue_age: int = Field (default=55, ge=0, description="Maximum issue age for the policies")
+    #policelerin maksimum başlangıç yaşını belirtir. Bu, modelin oluşturduğu poliçelerin hangi yaş aralığında olduğunu belirler.
 
     discount_rate: float = Field (default=0.05, gt=0, description="Discount rate for the policies")
+    #iskonto oranını belirtir. Bu, modelin gelecekteki nakit akışlarını bugünkü değerlerine dönüştürmesinde kullanılan orandır.
+
     tax_rate: float = Field (default=0.20, ge=0, le=1, description="Tax rate for the policies")
+    #policeler için geçerli olan vergi oranını belirtir. Bu, modelin vergi etkilerini hesaplamasında kullanılan orandır.
+
     premium_margin: float = Field (default=1.2, gt=0, description="Premium margin for the policies")
+    #prim marjını belirtir. Bu, modelin hesapladığı primlerin üzerine eklenen marjı ifade eder.
 
     inflation_rate: float = Field (default=0.05, gt=0, description="Inflation rate for the policies")
+    #enflasyon oranını belirtir. Bu, modelin gelecekteki nakit akışlarını enflasyona göre ayarlamasında kullanılan orandır.
+
     unit_cost: float = Field (default=1000.0, gt=0, description="Unit cost for the policies")   
-    
+    #policelerin birim maliyetini belirtir. Bu, modelin her bir poliçe için hesapladığı maliyeti ifade eder.
+
     base_mort_rate: float = Field (default=0.001, gt=0, description="Base mortality rate for the policies")
+    #policeler için geçerli olan temel ölüm oranını belirtir. Bu, modelin ölüm riskini hesaplamasında kullanılan orandır.
+
     mortality_age_factor: float = Field (default=0.0001, gt=0, description="Mortality age factor for the policies")
+    #policelerin yaş faktörünü belirtir. Bu, modelin ölüm riskini yaşa göre ayarlamasında kullanılan orandır.
+
     mortality_shock: float = Field (default=0.0005, gt=0, description="Mortality shock for the policies")
+    #policeler için geçerli olan ölüm şokunu belirtir. Bu, modelin beklenmedik ölüm risklerini hesaba katmasında kullanılan orandır.
 
     lapse_decay: float = Field (default=0.15, gt=0, description="Lapse decay for the policies")
+    #policelerin lapse decay oranını belirtir. Bu, modelin lapse riskini zamanla azalan bir şekilde hesaplamasında kullanılan orandır.
+
     lapse_base_rate: float = Field (default=0.10, gt=0, description="Lapse base rate for the policies")
+    #policeler için geçerli olan temel lapse oranını belirtir. Bu, modelin lapse riskini hesaplamasında kullanılan orandır.
 
     coc_ratio: float = Field (default=0.05, gt=0, description="Cost of capital ratio for the policies")
+    #policeler için geçerli olan sermaye maliyeti oranını belirtir. Bu, modelin sermaye maliyetini hesaplamasında kullanılan orandır.
+
     s2_margin: float = Field (default=0.25, gt=0, description="S2 margin for the policies")
+    #policeler için geçerli olan S2 marjını belirtir. Bu, modelin IFRS 17'ye göre risk marjını hesaplamasında kullanılan orandır.
+
     op_risk_ratio: float = Field (default=0.02, gt=0, description="Operational risk ratio for the policies")
+    #policeler için geçerli olan operasyonel risk oranını belirtir. Bu, modelin operasyonel risk maliyetini hesaplamasında kullanılan orandır.
 
     reinsurance_cost: float = Field (default=0.4, gt=0, description="Reinsurance cost for the policies")
+    #policeler için geçerli olan reasekürans maliyetini belirtir. Bu, modelin reasekürans masraflarını hesaplamasında kullanılan orandır.
+
     counterparty_pd: float = Field (default=0.005, ge=0, le=1, description="Counterparty probability of default")
+    #karşı tarafın temerrüt olasılığını belirtir.
+    # Bu, modelin karşı taraf riskini hesaplamasında kullanılan orandır.
+
     counterparty_lgd: float = Field (default=0.6, ge=0, le=1, description="Counterparty loss given default")
+    #karşı tarafın temerrüt durumunda oluşacak kayıp oranını belirtir.
 
     mortality_table_path: str = Field(
         default="data/mortality_table.csv",
         description="Path to the mortality table CSV file",
+        # Bu, modelin ölüm oranlarını hesaplamak için kullanacağı mortalite tablosunun dosya yolunu belirtir.
     )
+
 
     use_mortality_table: bool = Field(
         default=True,
         description="Flag to indicate whether mortality should be read from table",
+        # Bu, modelin ölüm oranlarını hesaplamak için mortalite tablosunu kullanıp kullanmayacağını belirten bir bayraktır.
     )
+
 
     run_scenarios: bool = Field(
         default=True,
         description="Flag to indicate whether scenario analysis should be executed",
+        # Bu, modelin senaryo analizinin yürütülmesi gerekip gerekmediğini belirten bir bayraktır.
     )
 
 
     confidence_level: float = Field (default=0.95, ge=0.5, le=1, description="Confidence level for the risk adjustment")
+    # Bu, modelin risk ayarlaması için kullanacağı güven düzeyini belirtir. Genellikle 0.95 veya 0.99 gibi değerler kullanılır.
+
     n_risk_scenarios: int = Field (default=1000, gt=0, description="Number of risk scenarios to simulate for risk adjustment")
+    # Bu, modelin risk ayarlaması için simüle edeceği risk senaryolarının sayısını belirtir. Daha fazla senaryo, daha doğru bir risk ayarlaması sağlar ancak hesaplama süresini artırır.
+
     acquisition_cost: float = Field (default=500.0, gt=0, description="Acquisition cost per policy")
+    #policelerin edinim maliyetini belirtir. Bu, modelin her bir poliçe için hesapladığı edinim maliyetini ifade eder.
+
     admin_cost_per_policy: float = Field (default=100.0, gt=0, description="Administrative cost per policy")
+    #policelerin yönetimsel maliyetini belirtir. Bu, modelin her bir poliçe için hesapladığı yönetimsel maliyetini ifade eder.
+
     collection_cost_rate: float = Field (default=0.02, gt=0, description="Collection cost as a percentage of premium")
+    #policelerin tahsilat maliyetini belirtir. Bu, modelin primlerin yüzde kaçını tahsilat maliyeti olarak hesaplayacağını ifade eder.
+
     maintenance_cost_per_policy: float = Field (default=50.0, gt=0, description="Maintenance cost per policy")
+    #policelerin bakımı maliyetini belirtir. Bu, modelin her bir poliçe için hesapladığı bakım maliyetini ifade eder.
+
     reinsurance_cost_rate: float = Field (default=0.4, gt=0, description="Reinsurance cost as a percentage of premium")
+    #policelerin reasürans maliyetini belirtir. Bu, modelin primlerin yüzde kaçını reasekürans maliyeti olarak hesaplayacağını ifade eder.
+
     surrender_charge_rate: float = Field (default=0.1, gt=0, description="Surrender charge as a percentage of sum assured")
+    #policelerin iptal ücreti oranını belirtir. Bu, modelin teminat tutarının yüzde kaçını iptal ücreti olarak hesaplayacağını ifade eder.
+
     profit_margin: float = Field (default=0.2, gt=0, description="Profit margin as a percentage of premium")
+    #policelerin kar marjını belirtir. Bu, modelin primlerin yüzde kaçını kar marjı olarak hesaplayacağını ifade eder.
+
     contingency_loading: float = Field (default=0.05, gt=0, description="Contingency loading as a percentage of premium")
-
-
+    #policelerin beklenmedik durum yüklemesini belirtir. Bu, modelin primlerin yüzde kaçını beklenmedik durum yüklemesi olarak hesaplayacağını ifade eder.
 
     excel_output: bool = Field (default=True, description="Flag to indicate if Excel output is required")
+    # Bu, modelin Excel çıktısı gerekip gerekmediğini belirten bir bayraktır.
+
     output_path: str = Field (default="output/ifrs17_results.xlsx", description="Path for the Excel output file")
-    
-    
-    @field_validator('max_issue_age') 
-    @classmethod
-    def validate_age_range(cls, max_issue_age, info):
-        min_age = info.data.get('min_issue_age')
+    # Bu, modelin Excel çıktısı için dosya yolunu belirtir.
+
+
+    @field_validator("max_issue_age")
+    def validate_age_range(max_issue_age, info):
+        min_age = info.data.get("min_issue_age")
         if min_age is not None and max_issue_age < min_age:
-            raise ValueError("max_issue_age must be greater than or equal to min_issue_age")
+            raise ValueError("max_issue_age must be >= min_issue_age")
         return max_issue_age
 
 
-# Backward-compatible alias for earlier imports.
 model_config = ConfigModel
+# Bu, modelin yapılandırma parametrelerini içeren bir sınıf tanımlar. Kullanıcı, bu sınıfı kullanarak modelin nasıl çalışacağını belirleyen çeşitli parametreleri ayarlayabilir.
 
-# Backward-compatible alias for the user's preferred naming.
+
 ModelConfig = ConfigModel
+# Bu, modelin yapılandırma parametrelerini içeren bir sınıf tanımlar.

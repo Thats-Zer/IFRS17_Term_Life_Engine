@@ -1,30 +1,30 @@
-import sys
-import logging
-from pathlib import Path
-from typing import Optional
+import sys # <-- sys modülü, console encoding ve hata yönetimi için gerekli
+import logging # <-- logging modülü, gelişmiş logging için gerekli
+from pathlib import Path # <-- Pathlib, dosya yolları ve log tail için gerekli
+from typing import Optional # <-- Optional tipi, fonksiyon imzalarında kullanılabilir
 
-import pandas as pd
+import pandas as pd # <-- pandas, veri işleme için gerekli
 
-from engine.asumptions import loadconfig
-from engine.curves import create_discount_curve
-from engine.projection import (
-    create_master_data,
-    create_projection_table,
-    load_mortality_table
+from engine.asumptions import loadconfig # <-- Config yönetimi için gerekli
+from engine.curves import create_discount_curve # <-- Discount curve oluşturma için gerekli
+from engine.projection import ( 
+    create_master_data, # <-- Master data oluşturma için gerekli
+    create_projection_table, # <-- Projection tablosu oluşturma için gerekli
+    load_mortality_table # <-- Mortalite tablosu yükleme için gerekli
 )
-from engine.cashflows import calculate_cashflows
-from engine.bel import calculate_bel
-from engine.ra import calculate_risk_adjustment
-from engine.csm import calculate_csm_rollforward
-from engine.grouping import assign_ifrs17_groups
-from engine.outputs import save_outputs
-from engine.scenarios import run_scenarios
+from engine.cashflows import calculate_cashflows # <-- Nakit akışları hesaplama için gerekli
+from engine.bel import calculate_bel # <-- BEL hesaplama için gerekli
+from engine.ra import calculate_risk_adjustment # <-- RA hesaplama için gerekli
+from engine.csm import calculate_csm_rollforward # <-- CSM rollforward hesaplama için gerekli
+from engine.grouping import assign_ifrs17_groups # <-- IFRS17 gruplandırması için gerekli
+from engine.outputs import save_outputs # <-- Çıktı kaydetme için gerekli
+from engine.scenarios import run_scenarios # <-- Senaryo analizi için gerekli
 
 # ==================================================
 # LOGGING CONFIGURATION
 # ==================================================
 
-def _configure_console_encoding() -> None:
+def _configure_console_encoding() -> None: 
     for stream_name in ("stdout", "stderr"):
         stream = getattr(sys, stream_name, None)
         if stream is not None and hasattr(stream, "reconfigure"):
@@ -34,14 +34,14 @@ _configure_console_encoding()
 
 logging.basicConfig(
     level=logging.INFO,
-    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
+    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s", # <-- log formatı, timestamp, modül adı, seviye ve mesaj içerir
     handlers=[
         logging.StreamHandler(sys.stdout),
-        logging.FileHandler("engine.log", encoding="utf-8", mode="w"),  # <-- önemli: mode="w"
-    ],
+        logging.FileHandler("engine.log", encoding="utf-8", mode="w"),  # Log dosyası her çalışmada temizlenir
+    ], 
     force=True,
 )
-logger = logging.getLogger(__name__)
+logger = logging.getLogger(__name__) # <-- modül adıyla logger oluşturuluyor
 
 
 # ==================================================
@@ -49,8 +49,22 @@ logger = logging.getLogger(__name__)
 # ==================================================
 
 class EngineException(Exception):
-    """IFRS17 Engine custom exception."""
-    pass
+    def __init__(
+        self,
+        message: str,
+        *,
+        step: Optional[str] = None,
+        original: Optional[BaseException] = None, #--< Orijinal exception objesi, hata yönetimi ve logging için saklanır
+    ) -> None:
+        super().__init__(message)
+        self.step = step
+        self.original = original #--< Orijinal exception objesi, hata yönetimi ve logging için saklanır
+
+    def __str__(self) -> str:
+        base = super().__str__()
+        if self.step:
+            return f"[{self.step}] {base}"
+        return base # <-- Hata mesajını adım bilgisiyle zenginleştirir
 
 
 def handle_error(step_name: str, error: Exception) -> None:
@@ -112,7 +126,7 @@ def main() -> None:
     success = False
     try:
         logger.info("=" * 70)
-        logger.info("IFRS17 TERM LIFE ENGINE BAŞLANIYOR")
+        logger.info("IFRS17 TERM LIFE ENGINE BAŞLATILIYOR")
         logger.info("=" * 70)
         
         # ==================================================
@@ -125,7 +139,7 @@ def main() -> None:
             validate_config(config)
         except Exception as e:
             handle_error("CONFIG", e)
-            raise EngineException(f"Config yönetimi başarısız: {e}")
+            raise EngineException("Config yönetimi başarısız", step="CONFIG", original=e) from e
         
         # ==================================================
         # STEP 2: MORTALITY TABLE
@@ -149,8 +163,9 @@ def main() -> None:
             master_data = create_master_data(config)
         except Exception as e:
             handle_error("MASTER_DATA", e)
-            raise EngineException(f"Master data oluşturulamadı: {e}")
-        
+            raise EngineException("Master data oluşturulamadı", step="MASTER_DATA", original=e) from e
+        # ---> Master data oluşturulurken, config parametrelerine göre rastgele veri oluşturulur. Mortalite tablosu varsa, yaş dağılımı mortaliteye göre şekillendirilir.
+
         # ==================================================
         # STEP 4: DISCOUNT CURVE
         # ==================================================
@@ -160,7 +175,7 @@ def main() -> None:
             discount_curve = create_discount_curve(config)
         except Exception as e:
             handle_error("DISCOUNT_CURVE", e)
-            raise EngineException(f"Discount curve oluşturulamadı: {e}")
+            raise EngineException("Discount curve oluşturulamadı", step="DISCOUNT_CURVE", original=e) from e
         
         # ==================================================
         # STEP 5: PROJECTION
@@ -172,7 +187,7 @@ def main() -> None:
             projection = projection.merge(discount_curve, on="Year", how="left")
         except Exception as e:
             handle_error("PROJECTION", e)
-            raise EngineException(f"Projection oluşturulamadı: {e}")
+            raise EngineException("Projection oluşturulamadı", step="PROJECTION", original=e) from e
         
         # ==================================================
         # STEP 6: CASHFLOWS
@@ -183,13 +198,17 @@ def main() -> None:
 
             if "coverage_years" not in projection.columns:
                 if "Year" not in projection.columns:
-                    raise EngineException("Projection içinde 'Year' sütunu yok")
+                    raise EngineException("Projection içinde 'Year' sütunu yok", step="CASHFLOWS")
                 projection["coverage_years"] = projection["Year"].astype(int)
+                #---> Nakit akışları hesaplanırken, coverage_years sütunu kullanılır.
+                # Eğer projection içinde coverage_years yoksa, Year sütunu coverage_years olarak kullanılır.
+                # Bu sayede, projection tablosunda Year varsa,
+                # otomatik olarak coverage_years oluşturulur ve nakit akışları hesaplanabilir hale gelir.
 
             projection = calculate_cashflows(projection, config)
         except Exception as e:
             handle_error("CASHFLOWS", e)
-            raise EngineException(f"Nakit akışları hesaplanamadı: {e}")
+            raise EngineException("Nakit akışları hesaplanamadı", step="CASHFLOWS", original=e) from e
         
         # ==================================================
         # STEP 7: BEL
@@ -200,7 +219,7 @@ def main() -> None:
             bel_result = calculate_bel(projection, config)
         except Exception as e:
             handle_error("BEL", e)
-            raise EngineException(f"BEL hesaplanamadı: {e}")
+            raise EngineException("BEL hesaplanamadı", step="BEL", original=e) from e
         
         # ==================================================
         # STEP 8: RA
@@ -211,7 +230,7 @@ def main() -> None:
             ra_result = calculate_risk_adjustment(projection, config)
         except Exception as e:
             handle_error("RA", e)
-            raise EngineException(f"RA hesaplanamadı: {e}")
+            raise EngineException("RA hesaplanamadı", step="RA", original=e) from e
         
         # ==================================================
         # STEP 9: CSM
@@ -227,7 +246,7 @@ def main() -> None:
             )
         except Exception as e:
             handle_error("CSM", e)
-            raise EngineException(f"CSM hesaplanamadı: {e}")
+            raise EngineException("CSM hesaplanamadı", step="CSM", original=e) from e
         
         # ==================================================
         # STEP 10: GROUPING
@@ -238,7 +257,7 @@ def main() -> None:
             group_result = assign_ifrs17_groups(csm_result, projection, config)
         except Exception as e:
             handle_error("GROUPING", e)
-            raise EngineException(f"Gruplandırma başarısız: {e}")
+            raise EngineException("Gruplandırma başarısız", step="GROUPING", original=e) from e
         
         # ==================================================
         # STEP 11: SCENARIOS
@@ -282,7 +301,7 @@ def main() -> None:
             )
         except Exception as e:
             handle_error("OUTPUTS", e)
-            raise EngineException(f"Çıktılar kaydedilemedi: {e}")
+            raise EngineException("Çıktılar kaydedilemedi", step="OUTPUTS", original=e) from e
         
         # ==================================================
         # SUCCESS

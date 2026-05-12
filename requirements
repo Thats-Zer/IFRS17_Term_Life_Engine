@@ -1,5 +1,5 @@
 numpy
 pandas
-pydantic
+pydantic>=2,<3
 openpyxl
 pytest
