@@ -77,7 +77,6 @@ def calculate_risk_adjustment(
         "qx",
         "survival_ratio",
         "sum_assured",
-        "Adjusted_Death_Benefits",
         "adjusted_surrender_benefit",
         "Operating_Expenses",
         "Gross_Premium_Inflow",
@@ -96,19 +95,23 @@ def calculate_risk_adjustment(
     qx = projection["qx"].to_numpy(dtype=np.float32, copy=False)
     survival_ratio = projection["survival_ratio"].to_numpy(dtype=np.float32, copy=False)
     sum_assured = projection["sum_assured"].to_numpy(dtype=np.float32, copy=False)
-    adj_death = projection["Adjusted_Death_Benefits"].to_numpy(dtype=np.float32, copy=False)
     adj_surrender = projection["adjusted_surrender_benefit"].to_numpy(dtype=np.float32, copy=False)
     op_exp = projection["Operating_Expenses"].to_numpy(dtype=np.float32, copy=False)
     gross_premium = projection["Gross_Premium_Inflow"].to_numpy(dtype=np.float32, copy=False)
     discount_factor = projection["discount_factor"].to_numpy(dtype=np.float32, copy=False)
 
 
-    n_rows = len(projection) # Projeksiyon tablosundaki satır sayısı, yani poliçe sayısı.
+    n_rows = len(projection) # Projeksiyon tablosundaki satır sayısı (policy-year satırları).
     n_scenarios = int(config.n_risk_scenarios) # Risk senaryolarının sayısı, model yapılandırmasından alınır.
     #Bu, risk hesaplaması için kaç farklı senaryo oluşturulacağını belirler.
 
-    # Senaryo sonuçlarını doğrudan matris içinde tut
-    scenario_pv = np.empty((n_scenarios, n_rows), dtype=np.float32)
+    # policy_id satır bazlı geldiği için poliçe bazına indirgemek gerekir
+    unique_policies, policy_index = np.unique(policy_id, return_inverse=True)
+    n_policies = unique_policies.size
+
+    # Senaryo sonuçlarını poliçe bazında tut (PV, years summed)
+    scenario_pv = np.empty((n_scenarios, n_policies), dtype=np.float32)
+    tmp_policy_pv = np.zeros(n_policies, dtype=np.float32)
 
     for s in range(n_scenarios):
         stochastic_qx = np.random.binomial(n=1, p=qx, size=n_rows).astype(np.float32)
@@ -126,20 +129,23 @@ def calculate_risk_adjustment(
             - gross_premium #beklenen prim gelirleri
         ).astype(np.float32) #Bu, her poliçe için net yükümlülüğü hesaplar.
 
-        scenario_pv[s, :] = scenario_net_liability * discount_factor
-        #Bu, her poliçe için net yükümlülüğün bugünkü değerini hesaplar ve senaryo matrisine kaydeder.
+        pv_row = (scenario_net_liability * discount_factor).astype(np.float32)
+
+        # poliçe bazında PV topla
+        tmp_policy_pv.fill(0.0)
+        np.add.at(tmp_policy_pv, policy_index, pv_row)
+        scenario_pv[s, :] = tmp_policy_pv
 
     # Beklenen değer ve kuantil
-    expected_pv = scenario_pv.mean(axis=0) # Her poliçe için tüm senaryolardaki net yükümlülüğün ortalamasını alır.
-    tail_pv = np.quantile(scenario_pv, config.confidence_level, axis=0) 
-    # Her poliçe için tüm senaryolardaki net yükümlülüğün confidence_level yüzdelik değerini alır.
+    expected_pv = scenario_pv.mean(axis=0) # Poliçe bazında beklenen PV
+    tail_pv = np.quantile(scenario_pv, config.confidence_level, axis=0) # Poliçe bazında kuantil
 
     ra_per_policy = np.maximum(tail_pv - expected_pv, 0.0) * float(config.coc_ratio)
     # Bu, her poliçe için risk ayarlamasını hesaplar. Eğer tail_pv beklenen değerden düşükse, risk ayarlaması sıfır olur.
 
     return pd.DataFrame(
         {
-            "policy_id": policy_id,
+            "policy_id": unique_policies,
             "ra_per_policy": ra_per_policy.astype(np.float32),
         }
     )

@@ -186,19 +186,18 @@ def calculate_assumption_changes(
     # DISCOUNT RATE CHANGE (INTEREST RATE EFFECT)
     # ==================================================
     
+    rate_change_effect = None
     if "prior_discount_rate" in prior_assumptions:
-        prior_rate = prior_assumptions["prior_discount_rate"]
-        current_rate = config.discount_rate
-        
-        # PV recalculation with new rate
-        # Rate decrease -> higher PV -> CSM decrease (loss)
-        rate_change_effect = (
-            projection["Net_Cash_Flow"]
-            * (1 / (1 + current_rate) - 1 / (1 + prior_rate))
-            * projection["Year"]
-        )
-    else:
-        rate_change_effect = 0
+        prior_rate = float(prior_assumptions["prior_discount_rate"])
+        current_rate = float(config.discount_rate)
+
+        # PV recalculation with new vs prior rate (simple flat-rate curve assumption)
+        # ΔPV_t = CF_t * (v_new^t - v_old^t)
+        if "Net_Cash_Flow" in projection.columns and "Year" in projection.columns:
+            v_new = 1.0 / (1.0 + current_rate)
+            v_old = 1.0 / (1.0 + prior_rate)
+            t = projection["Year"].astype(np.int32)
+            rate_change_effect = projection["Net_Cash_Flow"] * ((v_new ** t) - (v_old ** t))
     
     # ==================================================
     # TOTAL UNLOCK ADJUSTMENT
@@ -212,13 +211,21 @@ def calculate_assumption_changes(
             "lapse_experience_gain": "sum"
         })
     )
-    
-    unlock_adjustments["rate_change_effect"] = rate_change_effect
+
+    if rate_change_effect is not None:
+        rate_change_effect_agg = (
+            projection.assign(rate_change_effect=rate_change_effect)
+            .groupby("policy_id", sort=False, as_index=False)["rate_change_effect"]
+            .sum()
+        )
+        unlock_adjustments = unlock_adjustments.merge(rate_change_effect_agg, on="policy_id", how="left")
+    else:
+        unlock_adjustments["rate_change_effect"] = 0.0
     
     unlock_adjustments["unlock_gain_loss"] = (
         unlock_adjustments["mortality_experience_gain"]
         + unlock_adjustments["lapse_experience_gain"]
-        + unlock_adjustments.get("rate_change_effect", 0)
+        + unlock_adjustments["rate_change_effect"]
     ).astype(np.float32)
     
     logger.info(

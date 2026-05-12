@@ -154,23 +154,20 @@ def run_single_scenario(
         #Bu, projeksiyon tablosunu kullanarak Risk Adjustment (RA) hesaplar
         # sonuçları ra_result DataFrame'ine atar.
 
-        total_bel = float(bel_result["BEL"].sum()) if "BEL" in bel_result.columns else float("nan")
-        #Bu, bel_result DataFrame'inde "BEL" sütunu varsa, 
-        # bu sütundaki değerlerin toplamını hesaplar ve total_bel değişkenine atar.
+        # --- Aggregations (support both new and legacy column names)
+        if "bel_per_policy" in bel_result.columns:
+            total_bel = float(bel_result["bel_per_policy"].sum())
+        elif "BEL" in bel_result.columns:
+            total_bel = float(bel_result["BEL"].sum())
+        else:
+            total_bel = float("nan")
 
-        if "RA" in ra_result.columns:
-            total_ra = float(ra_result["RA"].sum()) 
-        #Bu, ra_result DataFrame'inde "RA" sütunu varsa, bu sütundaki değerlerin toplamını hesaplar
-        # total_ra değişkenine atar.
-
-        elif "ra_per_policy" in ra_result.columns:
+        if "ra_per_policy" in ra_result.columns:
             total_ra = float(ra_result["ra_per_policy"].sum())
-        #Bu, ra_result DataFrame'inde "RA" sütunu yoksa ancak "ra_per_policy" sütunu varsa,
-        # bu sütundaki değerlerin toplamını hesaplar ve total_ra değişkenine atar.
+        elif "RA" in ra_result.columns:
+            total_ra = float(ra_result["RA"].sum())
         else:
             total_ra = float("nan")
-            #Bu, ra_result DataFrame'inde ne "RA" ne de "ra_per_policy" sütunu varsa,
-            # total_ra değişkenine NaN (geçersiz değer) atar.
 
         return {
             "scenario": index, #Senaryo adını belirtir.
@@ -185,7 +182,7 @@ def run_single_scenario(
             # Bu, senaryoda hesaplanan toplam Risk Adjustment (RA) değerini belirtir.
         }
 
-    except Exception as e: 
+    except Exception as e:
         print(f"Error processing scenario {index}: {e}")
         return None
     #Burada, senaryo çalıştırılırken herhangi bir hata oluşursa,
@@ -196,12 +193,10 @@ def run_single_scenario(
     finally:
         # best-effort memory release for scenario threads
         gc.collect()
-        #Bu, senaryo çalıştırmaları sırasında bellek kullanımını optimize etmek için 
+        #Bu, senaryo çalıştırmaları sırasında bellek kullanımını optimize etmek için
         # garbage collection'ı manuel olarak tetikler.
-        # Özellikle çok sayıda senaryo çalıştırırken, 
+        # Özellikle çok sayıda senaryo çalıştırırken,
         # bellek kullanımını kontrol altında tutmak için önemlidir.
-
-
 def run_scenarios(
     base_config: ModelConfig,
     scenarios: dict,

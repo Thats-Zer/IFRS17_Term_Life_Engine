@@ -376,10 +376,11 @@ def attach_mortality_and_lapse(
     # SURVIVAL PROBABILITY (KÜMÜLATIF)
     # ===============================================
     
-    # Yıl içi survival (two-decrement approximation): (1 - qx) * (1 - lapse)
-    # Bu, 1 - qx - lapse formülüne göre daha tutarlı bir birleşik decrement yaklaşımıdır.
+    # Yıl içi survival (competing decrements - yıllık olasılık yaklaşımı):
+    #   survive_t = 1 - qx_t - lapse_t
+    # Not: qx ve lapse_rate yıllık olasılıklar olarak ele alınıyor.
     projection["survival_multiplier"] = (
-        (1 - projection["qx"]) * (1 - projection["lapse_rate"])
+        (1 - projection["qx"] - projection["lapse_rate"])
         .clip(0, 1)
         .astype(np.float32)
     )
