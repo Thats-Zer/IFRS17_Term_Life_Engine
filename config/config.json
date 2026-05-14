@@ -42,11 +42,15 @@
     "contingency_loading": 0.05,
 
     "excel_output": true,
-    "output_path": "output/ifrs17_results.xlsx",
+    "output_path": "outputs/ifrs17_term_life_projection.xlsx",
     "use_float64": true,
 
     "mortality_table_path": "data/mortality_table.csv",
     "use_mortality_table": true,
-    "run_scenarios": true
+    "run_scenarios": true,
+    "reporting_year": 1,
+    "ra_mortality_sigma": 0.10,
+    "ra_lapse_sigma": 0.15,
+    "ra_expense_sigma": 0.10
 
 }

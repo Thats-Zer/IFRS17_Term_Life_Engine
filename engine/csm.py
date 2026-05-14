@@ -51,6 +51,7 @@ def calculate_initial_csm(
     """
 
     float_dtype = np.float64 if bool(getattr(config, "use_float64", False)) else np.float32
+    bel_result = bel_result.copy()
     
     # ==================================================
     # PREMIUM ANNUITY PV
@@ -72,11 +73,11 @@ def calculate_initial_csm(
                 pv_col: Optional[str]
                 if "PV_Gross_Premium_Inflow" in proj.columns:
                     pv_col = "PV_Gross_Premium_Inflow"
-                elif "Gross_Premium_Inflow" in proj.columns and "discount_factor" in proj.columns:
+                elif "Gross_Premium_Inflow" in proj.columns and "discount_factor_opening" in proj.columns:
                     pv_col = "PV_Gross_Premium_Inflow"
                     proj = proj.copy()
                     proj[pv_col] = (
-                        proj["Gross_Premium_Inflow"] * proj["discount_factor"]
+                        proj["Gross_Premium_Inflow"] * proj["discount_factor_opening"]
                     ).astype(float_dtype)
                 else:
                     pv_col = None
@@ -92,10 +93,7 @@ def calculate_initial_csm(
             bel_result = bel_result.merge(pv_premiums_df, on="policy_id", how="left")
             bel_result["pv_premiums"] = bel_result["pv_premiums"].fillna(0.0).astype(float_dtype)
         else:
-            bel_result["pv_premiums"] = (
-                bel_result["bel_per_policy"]
-                * (1 + config.premium_margin)
-            ).astype(float_dtype)
+            bel_result["pv_premiums"] = np.float32(0.0)
 
         # ==================================================
         # PLAIN COVER (EXPECTED DEATH BENEFIT)
@@ -148,19 +146,18 @@ def calculate_initial_csm(
         + csm_data["ra_per_policy"]
     )
     
-    csm_data["initial_csm_raw"] = (
-        csm_data["pv_premiums"]
-        - csm_data["total_liability"]
-    ).astype(float_dtype)
+    # BEL is liability-positive and already net of premium inflows.
+    # A profitable group has negative fulfilment cash flows after RA.
+    csm_data["initial_csm_raw"] = (-csm_data["total_liability"]).astype(float_dtype)
     
     # ==================================================
     # ONEROUS CONTRACT DETECTION
     # ==================================================
     
-    csm_data["is_onerous"] = csm_data["initial_csm_raw"] < 0
+    csm_data["is_onerous"] = csm_data["total_liability"] > 0
 
     # Onerous poliçelerde CSM = 0, loss ayrıca kaydedilir (pozitif tutar)
-    csm_data["onerous_loss"] = np.maximum(-csm_data["initial_csm_raw"], 0).astype(float_dtype)
+    csm_data["onerous_loss"] = np.maximum(csm_data["total_liability"], 0).astype(float_dtype)
     csm_data["initial_csm"] = csm_data["initial_csm_raw"].clip(lower=0).astype(float_dtype)
     
     # ==================================================
@@ -355,34 +352,20 @@ def calculate_finance_cost(
     
     opening_liability = opening_liability.copy()
     
-    if "total_opening_liability" not in opening_liability.columns:
-        opening_liability["total_opening_liability"] = (
-            opening_liability.get("bel_opening", 0)
-            + opening_liability.get("ra_opening", 0)
-            + opening_liability.get("csm_opening", 0)
-        )
-    
-    # ==================================================
-    # DISCOUNT RATE CHANGE
-    # ==================================================
-    
-    if prior_year_rate is None:
-        prior_year_rate = config.discount_rate  # Sabit varsay
-    
-    rate_change = config.discount_rate - prior_year_rate
+    accretion_rate = float(prior_year_rate if prior_year_rate is not None else config.discount_rate)
     
     # ==================================================
     # FINANCE COST = LIABILITY × RATE CHANGE
     # ==================================================
     
     opening_liability["finance_cost"] = (
-        opening_liability["total_opening_liability"]
-        * rate_change
+        opening_liability.get("csm_opening", 0.0)
+        * accretion_rate
     ).astype(np.float32)
     
     logger.info(
         f"✓ Finance cost calculated: "
-        f"Rate change={rate_change*100:+.2f}%, "
+        f"Accretion rate={accretion_rate*100:+.2f}%, "
         f"Total FC={opening_liability['finance_cost'].sum():,.2f}"
     )
     
@@ -555,7 +538,19 @@ def calculate_csm_rollforward(
     csm_release_df = calculate_csm_release(projection, csm_opening, config)
     
     # Poliçe bazında toplama
-    csm_release_agg = csm_release_df.groupby("policy_id", sort=False)["csm_release"].sum().reset_index()
+    # Single reporting-period rollforward: use the current reporting year release,
+    # not the full projected lifetime release.
+    reporting_year = int(getattr(config, "reporting_year", csm_release_df["Year"].min()) or csm_release_df["Year"].min())
+    csm_release_current = csm_release_df[csm_release_df["Year"] == reporting_year]
+    if csm_release_current.empty:
+        raise ValueError(f"CSM release icin reporting_year bulunamadi: {reporting_year}")
+
+    csm_release_agg = (
+        csm_release_current
+        .groupby("policy_id", sort=False)["csm_release"]
+        .sum()
+        .reset_index()
+    )
     
     # ==================================================
     # STEP 5: UNLOCKING ADJUSTMENT

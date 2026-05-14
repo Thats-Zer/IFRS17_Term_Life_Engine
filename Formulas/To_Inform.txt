@@ -1,18 +1,14 @@
 IFRS17 TERM LIFE ENGINE
 FORMULA & LOGIC PAPER
 
-
 Starting Note
 
-This project was rewritten many times while learning actuarial modeling,
-financial mathematics, and IFRS 17 measurement logic.
+This document explains the simplified actuarial and IFRS 17 measurement logic
+used by this educational term-life engine. The formulas below are aligned with
+the current codebase.
 
-The purpose of this document is to explain the mathematical and conceptual structure behind the engine.
-
-The formulas and structures shown here are intentionally simplified for educational clarity.
-
-The project may still contain mistakes or incomplete interpretations.
-If you notice any inconsistency, please report it.
+The model is not production-calibrated. It is intended for learning, testing,
+and portfolio demonstration.
 
 
 ===========================================================
@@ -21,616 +17,425 @@ If you notice any inconsistency, please report it.
 
 Let:
 
-t  = projection year
 i  = policy index
+t  = projection year
 n  = number of policies
-T  = total projection horizon
+T  = projection horizon
 
-The engine projects every insurance policy separately through time.
+The engine projects each policy separately through time:
 
-Mathematically:
+Projection(i, t)
 
-Projection(i,t)
+For every policy-year row, the engine calculates:
 
-This means:
-
-for every policy i
-and every projection year t,
-
-the engine calculates all required insurance cashflows and liability movements.
-
-If:
-
-n = 10,000 policies
-T = 20 years
-
-then:
-
-Total Projection Rows
-=
-n × T
-=
-200,000 rows
-
-Because of this large calculation volume,
-vectorized matrix-style calculations are preferred instead of traditional loops.
-
-
-===========================================================
-2) CORE INSURANCE PROJECTION LOGIC
-===========================================================
-
-For every policy-year combination,
-the engine calculates:
-
-> Survival Probability
-> Mortality Probability
-> Lapse Probability
-> Active Policy Status
-> Premium Cashflows
-> Claim Cashflows
-> Expense Cashflows
-> Net Cashflows
-> Discounted Cashflows
+> age and in-force status
+> mortality and lapse assumptions
+> survival ratio
+> premiums, claims, expenses, surrender and reinsurance cashflows
+> present value cashflows
 > BEL
 > Risk Adjustment
 > CSM
-> OCI movements
-
-These calculations together create the IFRS 17 liability structure.
+> IFRS 17 grouping
+> scenario results
 
 
 ===========================================================
-3) SURVIVAL PROBABILITY
+2) MORTALITY, LAPSE AND SURVIVAL
 ===========================================================
 
-Let:
+Mortality:
 
-q_x = mortality probability at age x
-
-Then:
-
-p_x = 1 - q_x
-
-where:
-
-p_x = annual survival probability
-
-At inception:
-
-Survival(0) = 1
-
-because all policies are initially assumed active.
-
-For future years:
-
-Survival(t)
+qx(t)
 =
-Survival(t-1)
-×
-(1 - q_{x+t-1})
+mortality table rate by current age
 
-This creates cumulative survival probability through time.
+or, if no table is used:
 
-
-===========================================================
-4) MORTALITY PROBABILITY
-===========================================================
-
-Mortality probability represents the probability that death occurs during year t.
-
-The formula is:
-
-Death_Probability(t)
+qx(t)
 =
-Survival(t-1)
-×
-q_{x+t-1}
+base_mort_rate + age_factor * (current_age - min_issue_age)
 
-This adjustment is necessary because death may only occur if the policyholder survives until the beginning of that year.
+Scenario mortality shock:
 
-
-===========================================================
-5) LAPSE PROBABILITY
-===========================================================
-
-Lapse probability represents the probability that the policyholder terminates the contract voluntarily.
-
-Simplified form:
-
-Lapse_Probability(t)
+qx_scenario(t)
 =
-Persistency(t-1)
-×
-lapse_rate
+clip(qx(t) * mortality_shock_multiplier + mortality_shock, 0, 1)
 
-Persistency evolves as:
+Lapse:
 
-Persistency(t)
+lapse_rate(t)
 =
-Persistency(t-1)
-×
-(1 - lapse_rate)
+lapse_base_rate * exp(-lapse_decay * (t - 1))
 
-At inception:
+Survival multiplier:
 
-Persistency(0) = 1
-
-
-===========================================================
-6) ACTIVE POLICY STATUS
-===========================================================
-
-A policy must both survive and remain in-force.
-
-Therefore:
-
-Active(t)
+survival_multiplier(t)
 =
-Survival(t)
-×
-Persistency(t)
+(1 - qx(t)) * (1 - lapse_rate(t))
 
-This variable is one of the most important projection variables because premiums, expenses, and coverage units depend on active contracts.
+Opening survival ratio:
 
-
-===========================================================
-7) PREMIUM CASHFLOWS
-===========================================================
-
-Expected premium inflows are calculated as:
-
-Premium_CF(t)
+survival_ratio(t)
 =
-Premium
-×
-Active(t)
+product of survival multipliers from years 1 to t-1
 
-If premium payment term expires:
-
-Premium_CF(t) = 0
-
-for:
-
-t > premium_payment_term
+Therefore, Year 1 has survival_ratio = 1.
 
 
 ===========================================================
-8) CLAIM CASHFLOWS
+3) PREMIUM AND CASHFLOW LOGIC
 ===========================================================
 
-Expected claim outflows:
+Gross premium inflow:
 
-Claim_CF(t)
+Gross_Premium_Inflow(t)
 =
-Sum_Assured
-×
-Death_Probability(t)
+in_force(t) * survival_ratio(t) * gross_annual_premium
 
-General insurance logic:
+Death benefits:
 
-Expected Claim
+Death_Benefits(t)
 =
-Benefit Amount
-×
-Probability of Event
+in_force(t) * survival_ratio(t) * qx(t) * sum_assured
 
-This structure forms the foundation of actuarial valuation models.
+Surrender benefits:
 
-
-===========================================================
-9) EXPENSE CASHFLOWS
-===========================================================
-
-Expenses are separated into:
-
-> Acquisition Expenses
-> Maintenance Expenses
-
-Initial acquisition expense:
-
-Acquisition_CF(0)
+Surrender_Benefit(t)
 =
-Acquisition_Cost
+in_force(t) * survival_ratio(t) * lapse_rate(t)
+* max(net_annual_premium - surrender_charge(t), 0)
 
-Maintenance expenses:
+Operating expenses:
 
-Expense_CF(t)
+Operating_Expenses(t)
 =
-Maintenance_Expense
-×
-Active(t)
+in_force(t) * survival_ratio(t) * (1 - lapse_rate(t)) * total_expense(t)
 
-Examples:
+Reinsurance ceding:
 
-> Commission payments
-> Operational expenses
-> Administration costs
-> Claims handling expenses
-> IT infrastructure costs
-
-
-===========================================================
-10) NET CASHFLOW STRUCTURE
-===========================================================
-
-Net expected cashflows:
-
-Net_CF(t)
+Reinsurance_Ceding(t)
 =
-Premium_CF(t)
--
-Claim_CF(t)
--
-Expense_CF(t)
+Gross_Premium_Inflow(t) * reinsurance_cost_rate
 
-Positive values indicate expected profit generation.
+Reinsurance recovery:
 
-Negative values indicate expected losses or heavy insurance outflows.
-
-
-===========================================================
-11) DISCOUNTING LOGIC
-===========================================================
-
-IFRS 17 requires fulfilment cashflows to reflect time value of money.
-
-Present value formula:
-
-PV(CF_t)
+Reinsurance_Recovery(t)
 =
-CF_t / (1+r)^t
+Death_Benefits(t) * reinsurance_cost_rate
 
-Where:
+Counterparty default cost:
 
-CF_t = future cashflow
-r    = discount rate
-
-Total discounted value:
-
-PV_Total
+Counterparty_Default_Cost(t)
 =
-Σ PV(CF_t)
+Reinsurance_Recovery(t) * counterparty_pd * counterparty_lgd
 
-The engine may use:
+Net cashflow:
 
-> Locked-in discount rates
-> Current discount rates
-> Yield curves
-> Scenario-based curves
+Net_Cash_Flow(t)
+=
+Total_Inflows(t) - Total_Outflows(t)
 
 
 ===========================================================
-12) BEST ESTIMATE LIABILITY (BEL)
+4) DISCOUNTING AND TIMING CONVENTION
 ===========================================================
 
-BEL represents discounted expected future fulfilment cashflows.
+Closing present value factor:
 
-Simplified structure:
+discount_factor(t)
+=
+1 / (1 + r)^t
+
+Opening present value factor:
+
+discount_factor_opening(t)
+=
+1 / (1 + r)^(t - 1)
+
+The engine uses this timing convention:
+
+> Premium inflows: opening discount factor
+> Reinsurance ceding premiums: opening discount factor
+> Claims: closing discount factor
+> Expenses: closing discount factor
+> Surrender benefits: closing discount factor
+> Reinsurance recoveries: closing discount factor
+> Counterparty default costs: closing discount factor
+
+Total PV inflows:
+
+PV_Total_Inflows
+=
+PV_Gross_Premium_Inflow + PV_Reinsurance_Recovery
+
+Total PV outflows:
+
+PV_Total_Outflows
+=
+PV_Net_Death_Benefit
++ PV_Surrender_Benefit
++ PV_Operating_Expenses
++ PV_Reinsurance_Ceding
++ PV_Counterparty_Default_Cost
+
+PV net cashflow:
+
+PV_Net_Cash_Flow
+=
+PV_Total_Inflows - PV_Total_Outflows
+
+
+===========================================================
+5) BEST ESTIMATE LIABILITY (BEL)
+===========================================================
+
+The engine uses a liability-positive BEL convention:
 
 BEL
 =
-PV(Claims + Expenses - Premiums)
+PV(Outflows) - PV(Inflows)
 
 Equivalent form:
 
 BEL
 =
-- PV(Net_CF)
+-PV(Net_Cash_Flow)
 
-BEL is recalculated at every projection period.
+Interpretation:
 
+> BEL > 0 means a net liability.
+> BEL < 0 means a net asset position.
 
-===========================================================
-13) RISK ADJUSTMENT (RA)
-===========================================================
+BEL includes adjusted mortality and surrender assumptions:
 
-IFRS 17 requires compensation for non-financial risk uncertainty.
-
-Simplified implementation:
-
-RA
+Adjusted_qx(t)
 =
-CoC_Ratio
-×
-BEL
+qx(t) * (1 - lapse_mortality_correlation * lapse_rate(t))
 
-Where:
-
-CoC_Ratio
+Adjusted_Death_Benefits(t)
 =
-Cost of Capital style risk parameter
+in_force(t) * survival_ratio(t) * adjusted_qx(t) * sum_assured
 
-Real-world approaches may include:
+BEL liability cashflow:
 
-> Confidence Level
-> Tail Value at Risk
-> Stochastic simulation
-> Full Cost of Capital frameworks
+PV_Adjusted_Liability_Cash_Flow(t)
+=
+PV(claims + surrender + expenses + reinsurance ceding + default cost)
+- PV(premiums + reinsurance recovery)
+
+Policy BEL:
+
+BEL(i)
+=
+sum over t of PV_Adjusted_Liability_Cash_Flow(i, t)
 
 
 ===========================================================
-14) CONTRACTUAL SERVICE MARGIN (CSM)
+6) RISK ADJUSTMENT (RA)
+===========================================================
+
+Risk Adjustment compensates for non-financial risk uncertainty.
+
+The current engine uses a simplified stochastic confidence-level approach:
+
+RA(i)
+=
+CoC_Ratio * max(Quantile_alpha(PV_Liability(i)) - Mean(PV_Liability(i)), 0)
+
+The simulated liability distribution uses the same liability-positive timing
+convention as BEL.
+
+The simplified risk drivers are:
+
+> mortality volatility
+> lapse volatility
+> expense volatility
+> counterparty default events
+> reinsurance ceding and recovery effects
+
+Configuration parameters:
+
+> confidence_level
+> n_risk_scenarios
+> coc_ratio
+> ra_mortality_sigma
+> ra_lapse_sigma
+> ra_expense_sigma
+
+The risk decomposition function returns total RA only. Fixed percentage splits
+are intentionally avoided because they would be misleading without a true
+component attribution run.
+
+
+===========================================================
+7) CONTRACTUAL SERVICE MARGIN (CSM)
 ===========================================================
 
 CSM represents unearned future profit.
 
-Initial CSM:
+Important convention:
 
-CSM_Initial
-=
-- (BEL + RA)
+BEL already includes premium inflows. Therefore, premiums must not be
+subtracted again in the CSM formula.
 
-if:
+Total liability before CSM:
 
-(BEL + RA) < 0
-
-If contracts are loss-making:
-
-CSM = 0
-
-and a Loss Component may arise.
-
-Under IFRS 17,
-future profits cannot be recognized immediately.
-
-
-===========================================================
-15) LOSS COMPONENT
-===========================================================
-
-If fulfilment cashflows are unfavorable:
-
-BEL + RA > 0
-
-then:
-
-Loss_Component
+Total_Liability
 =
 BEL + RA
 
-This amount is recognized immediately in profit or loss.
+Initial CSM:
+
+Initial_CSM
+=
+max(-(BEL + RA), 0)
+
+Onerous loss:
+
+Onerous_Loss
+=
+max(BEL + RA, 0)
+
+Interpretation:
+
+> If BEL + RA < 0, the contract/group is profitable and CSM is positive.
+> If BEL + RA > 0, the contract/group is onerous and CSM is zero.
+
+PV premiums are still stored as disclosure/reconciliation information, but they
+are not used as an additional subtraction in the CSM formula.
 
 
 ===========================================================
-16) COVERAGE UNITS
+8) CSM RELEASE AND ROLLFORWARD
 ===========================================================
 
-Coverage units determine how CSM is released.
-
-Simplified structure:
+Coverage units:
 
 Coverage_Unit(t)
 =
-Sum_Assured
-×
-Active(t)
+in_force(t) * survival_ratio(t) * (1 - lapse_rate(t))
 
-Remaining future coverage:
+Total coverage units:
 
-Remaining_Coverage(t)
+Total_Coverage
 =
-Σ future coverage units
+sum over projection years of Coverage_Unit(t)
 
 CSM release:
 
 CSM_Release(t)
 =
-Opening_CSM
-×
-Coverage_Unit(t)
-/
-Remaining_Coverage(t)
+Opening_CSM * Coverage_Unit(t) / Total_Coverage
 
-This creates proportional profit emergence.
+The engine produces a single reporting-period rollforward. Therefore it uses
+the configured reporting_year for the release included in csm_results.csv.
 
+Finance cost / accretion:
 
-===========================================================
-17) CSM ROLLFORWARD
-===========================================================
-
-CSM evolves through time.
-
-Simplified structure:
-
-Closing_CSM(t)
+Finance_Cost
 =
-Opening_CSM(t)
-+
-Interest_Accretion(t)
--
-CSM_Release(t)
+Opening_CSM * accretion_rate
 
-Interest accretion:
+By default, accretion_rate is the configured discount_rate unless a prior
+locked rate is supplied.
 
-Interest_Accretion(t)
+Closing CSM:
+
+CSM_Closing_Raw
 =
-Opening_CSM(t)
-×
-locked_in_rate
+CSM_Opening + Finance_Cost - CSM_Release - Unlocking_Adjustment
 
-IFRS 17 requires locked-in rates for CSM accretion.
+Reported CSM:
 
-
-===========================================================
-18) LIABILITY FOR REMAINING COVERAGE (LRC)
-===========================================================
-
-Simplified structure:
-
-LRC
+CSM_Closing
 =
-BEL
-+
-RA
-+
-CSM
-
-LRC decreases as insurance service is provided.
+max(CSM_Closing_Raw, 0)
 
 
 ===========================================================
-19) LIABILITY FOR INCURRED CLAIMS (LIC)
+9) IFRS 17 GROUPING
 ===========================================================
 
-LIC represents liabilities arising from incurred insured events.
+The engine groups contracts using:
 
-Examples:
+> business nature
+> risk level
+> lapse risk
+> onerous status
 
-> Reported claims
-> IBNR claims
-> Claims settlement expenses
+Grouping is performed at policy level, not policy-year level.
 
-This project does not model LIC separately in full detail.
+Therefore:
 
-
-===========================================================
-20) OCI LOGIC
-===========================================================
-
-OCI separates financial market volatility from insurance service result.
-
-Simplified structure:
-
-OCI
+Group policy count
 =
-Current_Rate_Valuation
--
-Locked_In_Rate_Valuation
+number of unique policy_id values in the group
 
-Purpose:
+Group total sum assured
+=
+sum of each policy's sum_assured once
 
-Reducing accounting volatility caused by changing interest rates.
+The group output is written to:
 
-
-===========================================================
-21) GROUPING LOGIC
-===========================================================
-
-IFRS 17 requires grouping of contracts.
-
-Typical grouping dimensions:
-
-> Portfolio
-> Profitability
-> Issue year
-> Risk characteristics
-
-Common groups:
-
-> Onerous contracts
-> Profitable contracts
-> Contracts with low risk of becoming onerous
+outputs/group_results.csv
 
 
 ===========================================================
-22) PROJECTION PIPELINE
+10) SCENARIO ANALYSIS
 ===========================================================
 
-Main pipeline structure:
+Scenario runs rebuild the projection, cashflows, BEL, RA and CSM under shocked
+assumptions.
 
-config
-→ assumptions
-→ discount curves
-→ policy generation
-→ mortality and lapse
-→ premium calculations
-→ claim calculations
-→ expense calculations
-→ net cashflows
-→ discounting
-→ BEL
-→ RA
-→ CSM
-→ grouping
-→ OCI
-→ outputs
+Current scenario outputs include:
 
+> scenario
+> n_policies
+> Total_BEL
+> Total_RA
+> Total_CSM_Opening
+> Total_CSM_Closing
+> Onerous_Count
+> Onerous_Loss
 
-===========================================================
-23) MORTALITY TABLE STRUCTURE
-===========================================================
+Typical shocks:
 
-The engine supports two mortality structures:
-
-1)
-mortality_table.csv
-
-2)
-Fallback qx() function
-
-If mortality tables exist,
-the engine reads external mortality assumptions.
-
-Otherwise,
-mortality is generated dynamically through qx().
+> mortality_up_10
+> lapse_up_20
+> expense_up_15
+> discount_down_100bps
 
 
 ===========================================================
-24) MATRIX CALCULATION LOGIC
+11) OUTPUTS
 ===========================================================
 
-Large-scale actuarial calculations require efficient computation structures.
+The engine writes:
 
-The engine therefore uses:
+> outputs/master_results.csv
+> outputs/projection_results.csv
+> outputs/bel_results.csv
+> outputs/ra_results.csv
+> outputs/csm_results.csv
+> outputs/group_results.csv
+> outputs/scenario_results.csv
+> outputs/ifrs17_term_life_projection.xlsx
 
-> Pandas vectorization
-> NumPy calculations
-> Matrix transformations
+Excel output can be disabled with:
 
-Advantages:
+excel_output = false
 
-> Faster runtime
-> Better scalability
-> Cleaner calculations
-> Easier rollforward structures
+The Excel file path is controlled by:
 
-
-===========================================================
-25) VALIDATION & CONTROL MECHANISM
-===========================================================
-
-The engine contains validation structures to detect logical inconsistencies.
-
-Examples:
-
-> Negative probabilities
-> Survival above 1
-> Invalid discount factors
-> Missing projection years
-> Invalid cashflow balances
-> Missing configuration values
-
-In actuarial modeling:
-
-A model running successfully
-does not necessarily mean
-the model is mathematically correct.
+output_path
 
 
 ===========================================================
-26) EDUCATIONAL PURPOSE
+12) FINAL NOTE
 ===========================================================
 
-This project was designed primarily for:
-
-> Learning IFRS 17
-> Understanding actuarial projections
-> Practicing insurance mathematics
-> Exploring liability rollforwards
-> Learning scalable financial modeling
-> Understanding insurance accounting structures
-
-The formulas shown here are simplified educational representations of real-world actuarial systems.
-
-
-===========================================================
-27) FINAL NOTE
-===========================================================
-
-This project was rewritten repeatedly during the learning process.
-
-The structure reflects an attempt to combine:
-
-> Actuarial mathematics
-> Insurance projection
+This document describes the current simplified engine behavior. Real IFRS 17
+production models require actuarial calibration, governance, audit controls,
+data validation, locked-in/current curve policy choices, and formal accounting
+methodology approval.

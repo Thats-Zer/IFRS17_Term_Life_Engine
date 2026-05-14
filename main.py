@@ -298,8 +298,11 @@ def main() -> None:
                 ra_result=ra_result,
                 csm_result=csm_result,
                 scenario_results=scenario_results,
-                output_dir="outputs",
-                master=master_data
+                output_dir=str(Path(config.output_path).parent),
+                master=master_data,
+                excel_output=bool(config.excel_output),
+                excel_path=config.output_path,
+                group_result=group_result,
             )
         except Exception as e:
             handle_error("OUTPUTS", e)

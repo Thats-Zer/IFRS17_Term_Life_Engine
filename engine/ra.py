@@ -1,160 +1,164 @@
-from typing import Tuple, Optional 
-#Bu, fonksiyonların döndürebileceği türleri belirtmek için kullanılır.
-import pandas as pd
-#Pandas, veri manipülasyonu ve analizi için kullanılan bir kütüphanedir.
-import numpy as np
-#NumPy, büyük, çok boyutlu diziler ve matrislerle çalışmak için kullanılan bir kütüphanedir.
 import logging
-#Logging, uygulama içinde bilgi mesajları, uyarılar ve hatalar kaydetmek için kullanılır.
-from scipy import stats
-#SciPy, istatistiksel hesaplamalar ve olasılık dağılımları için kullanılan bir kütüphanedir.
+
+import numpy as np
+import pandas as pd
 
 from model.config_model import ModelConfig
-#ModelConfig, model yapılandırma parametrelerini içeren bir sınıftır.
 
 logger = logging.getLogger(__name__)
-#Bu, modülün adıyla bir logger oluşturur. 
-# Logger, uygulama içinde bilgi mesajları, uyarılar ve hatalar kaydetmek için kullanılır.
 
 
-# ==================================================
-# RISK ADJUSTMENT CALCULATION
-# ==================================================
+def _prepare_adjusted_surrender(projection: pd.DataFrame) -> pd.DataFrame:
+    projection = projection.copy()
+    if "Surrender_Benefit" not in projection.columns:
+        projection["adjusted_surrender_benefit"] = np.float32(0.0)
+        return projection
+
+    projection["adjusted_surrender_benefit"] = projection["Surrender_Benefit"].astype(np.float32)
+    projection.loc[projection["Year"] == 1, "adjusted_surrender_benefit"] = 0.0
+
+    if "net_annual_premium" in projection.columns:
+        projection.loc[
+            projection["Year"] == 2,
+            "adjusted_surrender_benefit",
+        ] = projection.loc[projection["Year"] == 2, "net_annual_premium"] * 0.5
+
+    if "coverage_years" in projection.columns:
+        projection.loc[
+            projection["Year"] >= projection["coverage_years"],
+            "adjusted_surrender_benefit",
+        ] = 0.0
+
+    return projection
+
 
 def calculate_risk_adjustment(
     projection: pd.DataFrame,
-    config: ModelConfig
-) -> pd.DataFrame: # pd.DataFrame: policy_id ve ra_per_policy sütunları içeren bir DataFrame döndürür.
-   
-    """
+    config: ModelConfig,
+) -> pd.DataFrame:
+    """Calculate a simplified IFRS17 risk adjustment.
 
-    IFRS17 Risk Adjustment (RA) hesapla - KOMPLEKS YÖNTEM.
-    
-    Risk Adjustment Tanımı (IFRS17):
-    RA = CoC × PV[Quantile_alpha(Liability) - E(Liability)]
-    
-    Nerede:
-    - CoC: Cost of Capital Rate (genelde %6)
-    - alpha: Confidence Level (genelde 75%)
-    - Quantile: x. yüzde değeri
-    - Liability: Net liability cashflows
-    
-    Risk Kategorileri:
-    1. MORTALITE RİSKİ: Gerçek qx > beklenen qx
-    2. LAPSE RİSKİ: Gerçek lapse > beklenen lapse
-    3. EXPENSE RİSKİ: Gerçek expense > beklenen expense
-    4. REASÜRANS RİSKİ: Counterparty default riski
-        Mealen: karşı tarafın iflas etmesi durumunda ortaya çıkan risk
-    
-    Metodoloji:
-    1. Her risk kategorisi için stokastik senaryo
-    2. Yüzdelik hesabı (Quantile)
-    3. RA = CoC × PV(Tail Risk)
-    
-    Args:
-        projection: Projection tablosu
-        config: ModelConfig (confidence_level, coc_rate)
-        
-    Returns:
-        pd.DataFrame: policy_id ve ra_per_policy sütunları
-        
-    Raises:
-        ValueError: Parameters geçersizse
+    The distribution uses the same liability-positive timing convention as BEL:
+    closing outflows/recoveries are discounted with `discount_factor`, while
+    opening premiums and reinsurance ceding are discounted with
+    `discount_factor_opening`.
     """
-    
-    # Doğrulama
     if config.coc_ratio < 0 or config.coc_ratio > 1:
-        raise ValueError(f"coc_ratio [0, 1] olmalı, {config.coc_ratio} verildi")
-    # Bu, coc_ratio'nun 0 ile 1 arasında olup olmadığını kontrol eder. Eğer değilse, bir ValueError hatası gönderir.
-
+        raise ValueError(f"coc_ratio [0, 1] olmali, {config.coc_ratio} verildi")
     if config.confidence_level < 0.5 or config.confidence_level > 1:
-        raise ValueError(f"confidence_level [0.5, 1] olmalı, {config.confidence_level} verildi")
-    # Bu, confidence_level'in 0.5 ile 1 arasında olup olmadığını kontrol eder. Eğer değilse, bir ValueError hatası gönderir.
+        raise ValueError(f"confidence_level [0.5, 1] olmali, {config.confidence_level} verildi")
 
-    # RA hesaplaması için gerekli kolonların varlığını kontrol et ve sadece gerekli olanları array olarak al
-    # adjusted_surrender_benefit BEL modülünde türetiliyor olabilir; yoksa eldeki kolondan üret.
     if "adjusted_surrender_benefit" not in projection.columns:
-        if "Surrender_Benefit" in projection.columns:
-            projection = projection.copy()
-            projection["adjusted_surrender_benefit"] = projection["Surrender_Benefit"].astype(np.float32)
-        else:
-            projection = projection.copy()
-            projection["adjusted_surrender_benefit"] = np.float32(0.0)
+        projection = _prepare_adjusted_surrender(projection)
 
     required_cols = [
         "policy_id",
+        "Year",
         "qx",
+        "lapse_rate",
         "survival_ratio",
         "sum_assured",
         "adjusted_surrender_benefit",
         "Operating_Expenses",
         "Gross_Premium_Inflow",
         "discount_factor",
+        "discount_factor_opening",
     ]
-
-    # Eksik sütunları kontrol et
     missing = [c for c in required_cols if c not in projection.columns]
     if missing:
-        raise ValueError(f"RA için eksik sütunlar: {missing}")
-    #Gerekli sütun yoksa hata mesajı verir ve fonksiyonun çalışmasını durdurur.
+        raise ValueError(f"RA icin eksik sutunlar: {missing}")
 
-    # Sadece gerekli kolonlar ve sadece array olarak
-    #Copy olmadan oluşturulan NumPy array'leri, bellek kullanımını azaltır ve performansı artırır.
-    policy_id = projection["policy_id"].to_numpy(copy=False) 
+    policy_id = projection["policy_id"].to_numpy(copy=False)
     qx = projection["qx"].to_numpy(dtype=np.float32, copy=False)
+    lapse_rate = projection["lapse_rate"].to_numpy(dtype=np.float32, copy=False)
     survival_ratio = projection["survival_ratio"].to_numpy(dtype=np.float32, copy=False)
     sum_assured = projection["sum_assured"].to_numpy(dtype=np.float32, copy=False)
     adj_surrender = projection["adjusted_surrender_benefit"].to_numpy(dtype=np.float32, copy=False)
     op_exp = projection["Operating_Expenses"].to_numpy(dtype=np.float32, copy=False)
     gross_premium = projection["Gross_Premium_Inflow"].to_numpy(dtype=np.float32, copy=False)
     discount_factor = projection["discount_factor"].to_numpy(dtype=np.float32, copy=False)
+    discount_factor_opening = projection["discount_factor_opening"].to_numpy(dtype=np.float32, copy=False)
 
+    if "coverage_years" in projection.columns:
+        in_force = (
+            projection["Year"].to_numpy(copy=False)
+            <= projection["coverage_years"].to_numpy(copy=False)
+        ).astype(np.float32)
+    else:
+        in_force = np.ones(len(projection), dtype=np.float32)
 
-    n_rows = len(projection) # Projeksiyon tablosundaki satır sayısı (policy-year satırları).
-    n_scenarios = int(config.n_risk_scenarios) # Risk senaryolarının sayısı, model yapılandırmasından alınır.
-    #Bu, risk hesaplaması için kaç farklı senaryo oluşturulacağını belirler.
-
-    # Deterministic RNG (avoid dependence on global np.random state)
+    n_rows = len(projection)
+    n_scenarios = int(config.n_risk_scenarios)
     base_seed = int(getattr(config, "random_seed", 0) or 0) % (2**32)
 
-    # policy_id satır bazlı geldiği için poliçe bazına indirgemek gerekir
     unique_policies, policy_index = np.unique(policy_id, return_inverse=True)
     n_policies = unique_policies.size
-
-    # Senaryo sonuçlarını poliçe bazında tut (PV, years summed)
     scenario_pv = np.empty((n_scenarios, n_policies), dtype=np.float32)
     tmp_policy_pv = np.zeros(n_policies, dtype=np.float32)
 
+    re_rate = float(getattr(config, "reinsurance_cost_rate", 0.0) or 0.0)
+    counterparty_pd = float(getattr(config, "counterparty_pd", 0.0) or 0.0)
+    counterparty_lgd = float(getattr(config, "counterparty_lgd", 0.0) or 0.0)
+    lapse_mortality_correlation = float(getattr(config, "lapse_mortality_correlation", 0.1) or 0.0)
+
+    mort_sigma = float(getattr(config, "ra_mortality_sigma", 0.10) or 0.10)
+    lapse_sigma = float(getattr(config, "ra_lapse_sigma", 0.15) or 0.15)
+    expense_sigma = float(getattr(config, "ra_expense_sigma", 0.10) or 0.10)
+
+    reinsurance_ceding = (gross_premium * re_rate).astype(np.float32)
+
     for s in range(n_scenarios):
         rng = np.random.default_rng((base_seed + s) % (2**32))
-        stochastic_qx = rng.binomial(n=1, p=qx, size=n_rows).astype(np.float32)
-        #Bu, her poliçe için ölüm olayının gerçekleşip gerçekleşmediğini belirlemek için
-        # qx değerlerine göre binom dağılımından rastgele sayılar üretir. 
-        # 1, ölüm olayının gerçekleştiğini, 0 ise gerçekleşmediğini gösterir.
+        mort_mult = rng.lognormal(mean=-0.5 * mort_sigma**2, sigma=mort_sigma, size=n_rows).astype(np.float32)
+        lapse_mult = rng.lognormal(mean=-0.5 * lapse_sigma**2, sigma=lapse_sigma, size=n_rows).astype(np.float32)
+        expense_mult = rng.lognormal(mean=-0.5 * expense_sigma**2, sigma=expense_sigma, size=n_rows).astype(np.float32)
 
-        stochastic_death_benefits = survival_ratio * stochastic_qx * sum_assured
-        #Bu, her poliçe için ölüm durumunda ödenecek tazminat miktarını hesaplar.
+        stochastic_lapse = np.clip(lapse_rate * lapse_mult, 0.0, 1.0).astype(np.float32)
+        stochastic_qx = (
+            qx
+            * (1 - lapse_mortality_correlation * stochastic_lapse)
+            * mort_mult
+        ).clip(0.0, 1.0).astype(np.float32)
 
-        scenario_net_liability = (
-            stochastic_death_benefits #poliçe başı tazminat tutarı
-            + adj_surrender #beklenen iptal durumunda ödenecek tutar
-            + op_exp #beklenen operasyonel giderler
-            - gross_premium #beklenen prim gelirleri
-        ).astype(np.float32) #Bu, her poliçe için net yükümlülüğü hesaplar.
+        death_benefits = (
+            in_force
+            * survival_ratio
+            * stochastic_qx
+            * sum_assured
+        ).astype(np.float32)
+        surrender = (adj_surrender * lapse_mult).astype(np.float32)
+        expenses = (op_exp * expense_mult).astype(np.float32)
+        reinsurance_recovery = (death_benefits * re_rate).astype(np.float32)
 
-        pv_row = (scenario_net_liability * discount_factor).astype(np.float32)
+        if counterparty_pd > 0:
+            default_event = rng.binomial(
+                n=1,
+                p=np.clip(counterparty_pd, 0.0, 1.0),
+                size=n_rows,
+            ).astype(np.float32)
+            default_cost = reinsurance_recovery * default_event * counterparty_lgd
+        else:
+            default_cost = np.float32(0.0)
 
-        # poliçe bazında PV topla
+        pv_row = (
+            (
+                death_benefits
+                + surrender
+                + expenses
+                + default_cost
+                - reinsurance_recovery
+            )
+            * discount_factor
+            + (reinsurance_ceding - gross_premium) * discount_factor_opening
+        ).astype(np.float32)
+
         tmp_policy_pv.fill(0.0)
         np.add.at(tmp_policy_pv, policy_index, pv_row)
         scenario_pv[s, :] = tmp_policy_pv
 
-    # Beklenen değer ve kuantil
-    expected_pv = scenario_pv.mean(axis=0) # Poliçe bazında beklenen PV
-    tail_pv = np.quantile(scenario_pv, config.confidence_level, axis=0) # Poliçe bazında kuantil
-
+    expected_pv = scenario_pv.mean(axis=0)
+    tail_pv = np.quantile(scenario_pv, config.confidence_level, axis=0)
     ra_per_policy = np.maximum(tail_pv - expected_pv, 0.0) * float(config.coc_ratio)
-    # Bu, her poliçe için risk ayarlamasını hesaplar. Eğer tail_pv beklenen değerden düşükse, risk ayarlaması sıfır olur.
 
     return pd.DataFrame(
         {
@@ -164,36 +168,13 @@ def calculate_risk_adjustment(
     )
 
 
-# ==================================================
-# RISK DECOMPOSITION
-# ==================================================
-
-# Risk Adjustment'ı risk bileşenlerine ayır.
 def decompose_risk_adjustment(
     projection: pd.DataFrame,
-    config: ModelConfig
+    config: ModelConfig,
 ) -> pd.DataFrame:
+    """Return total RA only.
+
+    A reliable component attribution needs separate controlled runs by risk
+    driver; fixed percentage splits would be misleading.
     """
-    Risk Adjustment'ı risk bileşenlerine ayır.
-    
-    Returns:
-        pd.DataFrame: Mortality, lapse, expense, counterparty risk ayrı ayrı
-    """
-    # Öncelikle toplam risk ayarlamasını hesapla
-    ra_full = calculate_risk_adjustment(projection, config)
-    
-    # Daha detaylı breakdown (basitleştirilmiş)
-    ra_breakdown = ra_full.copy()
-    
-    ra_breakdown["mortality_ra"] = ra_full["ra_per_policy"] * 0.60
-    # Bu, toplam risk ayarlamasının %60'ının mortalite riskinden kaynaklandığını varsayar.
-    ra_breakdown["lapse_ra"] = ra_full["ra_per_policy"] * 0.25
-    # Bu, toplam risk ayarlamasının %25'inin lapse riskinden kaynaklandığını varsayar.
-    ra_breakdown["expense_ra"] = ra_full["ra_per_policy"] * 0.10
-    # Bu, toplam risk ayarlamasının %10'unun expense riskinden kaynaklandığını varsayar.
-    ra_breakdown["counterparty_ra"] = ra_full["ra_per_policy"] * 0.05
-    # Bu, toplam risk ayarlamasının %5'inin karşı iflas riskinden kaynaklandığını varsayar.
-    
-    logger.info("✓ Risk decomposition tamamlandı")
-    
-    return ra_breakdown #Bu, her poliçe için toplam risk ayarlamasını ve her bir risk kategorisine düşen payı içeren bir DataFrame döndürür.
+    return calculate_risk_adjustment(projection, config)

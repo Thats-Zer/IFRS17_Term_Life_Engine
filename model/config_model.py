@@ -136,6 +136,30 @@ class ConfigModel(BaseModel):
         description="Max parallel workers for scenario runs",
     )
 
+    reporting_year: int = Field(
+        default=1,
+        gt=0,
+        description="Reporting year used for single-period CSM rollforward release",
+    )
+
+    ra_mortality_sigma: float = Field(
+        default=0.10,
+        ge=0,
+        description="Lognormal volatility for mortality risk adjustment scenarios",
+    )
+
+    ra_lapse_sigma: float = Field(
+        default=0.15,
+        ge=0,
+        description="Lognormal volatility for lapse risk adjustment scenarios",
+    )
+
+    ra_expense_sigma: float = Field(
+        default=0.10,
+        ge=0,
+        description="Lognormal volatility for expense risk adjustment scenarios",
+    )
+
 
     # ==================================================
     # NUMERICS (optional)
@@ -180,7 +204,7 @@ class ConfigModel(BaseModel):
     excel_output: bool = Field (default=True, description="Flag to indicate if Excel output is required")
     # Bu, modelin Excel çıktısı gerekip gerekmediğini belirten bir bayraktır.
 
-    output_path: str = Field (default="output/ifrs17_results.xlsx", description="Path for the Excel output file")
+    output_path: str = Field (default="outputs/ifrs17_term_life_projection.xlsx", description="Path for the Excel output file")
     # Bu, modelin Excel çıktısı için dosya yolunu belirtir.
 
 

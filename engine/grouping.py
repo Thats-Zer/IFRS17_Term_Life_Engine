@@ -359,11 +359,18 @@ def assign_ifrs17_groups(
     # ==================================================
     
     # Grup bazında aggregasyon yap. group_id'ye göre gruplama yaparak, her grup için poliçe sayısı, toplam teminat tutarı ve ortalama coverage_years gibi özet istatistikler hesaplanır.
+    policy_level = projection[[
+        "policy_id",
+        "group_id",
+        "sum_assured",
+        "coverage_years",
+    ]].drop_duplicates("policy_id")
+
     group_agg = (
-        projection
+        policy_level
         .groupby("group_id", sort=False, as_index=False)
         .agg({
-            "policy_id": "count",
+            "policy_id": "nunique",
             "sum_assured": "sum",
             "coverage_years": "mean"
         })
@@ -374,7 +381,7 @@ def assign_ifrs17_groups(
     )
     
     # CSM sonuçları ile grupları birleştir. CSM sonuçları, poliçe bazında olduğundan, group_id'ye göre gruplama yaparak onerous grup bilgilerini ekleyelim.
-    policy_group_mapping = projection[["policy_id", "group_id"]].drop_duplicates()
+    policy_group_mapping = policy_level[["policy_id", "group_id"]]
     
     csm_group = (
         csm_result

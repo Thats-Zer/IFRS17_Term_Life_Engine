@@ -554,6 +554,22 @@ def calculate_cashflows(
     for col in closing_cols:
         if col in projection.columns:
             projection[f"PV_{col}"] = (projection[col] * projection["discount_factor"]).astype(float_dtype)
+
+    projection["PV_Total_Inflows"] = (
+        projection["PV_Gross_Premium_Inflow"]
+        + projection["PV_Reinsurance_Recovery"]
+    ).astype(float_dtype)
+    projection["PV_Total_Outflows"] = (
+        projection["PV_Net_Death_Benefit"]
+        + projection["PV_Surrender_Benefit"]
+        + projection["PV_Operating_Expenses"]
+        + projection["PV_Reinsurance_Ceding"]
+        + projection["PV_Counterparty_Default_Cost"]
+    ).astype(float_dtype)
+    projection["PV_Net_Cash_Flow"] = (
+        projection["PV_Total_Inflows"]
+        - projection["PV_Total_Outflows"]
+    ).astype(float_dtype)
     
     logger.info("✓ Nakit akışları hesaplandı (inflow, outflow, PV)")
     

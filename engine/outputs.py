@@ -41,6 +41,9 @@ def save_outputs(
     scenario_results: Optional[pd.DataFrame],
     output_dir: str,
     master: pd.DataFrame,
+    excel_output: bool = True,
+    excel_path: Optional[str] = None,
+    group_result: Optional[pd.DataFrame] = None,
 ) -> None:
     """Persist engine outputs to CSV and (optionally) Excel.
 
@@ -107,6 +110,13 @@ def save_outputs(
             encoding="utf-8-sig"
         )
 
+    if group_result is not None:
+        group_result.to_csv(
+            output_path / "group_results.csv",
+            index=False,
+            encoding="utf-8-sig"
+        )
+
     # Log: CSV çıktıların kaydedildiği bilgisini ver
     logger.info("CSV outputs saved")
 
@@ -114,8 +124,13 @@ def save_outputs(
     # EXCEL OUTPUT
     # ==================================================
 
+    if not excel_output:
+        logger.info("Excel output skipped by config")
+        return
+
     #Kaydetme yolunu belirle
-    excel_file = output_path / "ifrs17_term_life_projection.xlsx"
+    excel_file = Path(excel_path) if excel_path else output_path / "ifrs17_term_life_projection.xlsx"
+    excel_file.parent.mkdir(parents=True, exist_ok=True)
 
     # Excel'e kaydet: openpyxl motorunu kullanarak tüm DataFrame'leri tek bir dosyada farklı sayfalara yaz
     try:
@@ -125,6 +140,8 @@ def save_outputs(
             _write_excel_safe(writer, bel_result, "bel")
             _write_excel_safe(writer, ra_result, "ra")
             _write_excel_safe(writer, csm_result, "csm")
+            if group_result is not None:
+                _write_excel_safe(writer, group_result, "groups")
             if scenario_results is not None:
                 _write_excel_safe(writer, scenario_results, "scenarios")
         logger.info(f"Excel outputs saved: {excel_file}")

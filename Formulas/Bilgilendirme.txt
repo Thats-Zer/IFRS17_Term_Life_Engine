@@ -1,651 +1,441 @@
 IFRS17 TERM LIFE ENGINE
-FORMÜL VE MANTIK DOKÜMANI
+FORMUL VE MANTIK DOKUMANI
 
+Baslangic Notu
 
-Başlangıç Notu
+Bu dokuman, mevcut term-life engine icindeki basitlestirilmis aktueryal ve
+IFRS 17 olcum mantigini aciklar. Asagidaki formuller guncel kod ile uyumludur.
 
-Bu proje; aktüeryal modelleme, finansal matematik ve IFRS 17 ölçüm mantığını öğrenme sürecinde birçok kez yeniden yazılmıştır.
-
-Bu dokümanın amacı, engine yapısının arkasındaki matematiksel ve kavramsal mantığı açıklamaktır.
-
-Burada gösterilen formüller ve yapılar, eğitim amacıyla bilinçli şekilde sadeleştirilmiştir.
-
-Projede hâlâ hatalar veya eksik yorumlar bulunabilir.
-Eğer bir tutarsızlık fark ederseniz lütfen bildiriniz.
+Model uretim kalibrasyonuna sahip degildir. Egitim, test ve portfoy gosterimi
+amaciyla tasarlanmistir.
 
 
 ===========================================================
 1) GENEL MODEL YAPISI
 ===========================================================
 
-Tanımlar:
+Tanimlar:
 
-t  = projeksiyon yılı
-i  = poliçe indeksi
-n  = poliçe sayısı
-T  = toplam projeksiyon süresi
+i  = police indeksi
+t  = projeksiyon yili
+n  = police sayisi
+T  = projeksiyon ufku
 
-Engine her sigorta poliçesini zaman boyunca ayrı ayrı projekte eder.
+Engine her policeyi zaman boyunca ayri ayri projekte eder:
 
-Matematiksel olarak:
+Projection(i, t)
 
-Projection(i,t)
+Her police-yil satiri icin hesaplanan ana alanlar:
 
-Bu yapı şu anlama gelir:
-
-Her poliçe i
-ve her projeksiyon yılı t için,
-
-engine gerekli tüm sigorta nakit akışlarını ve yükümlülük hareketlerini hesaplar.
-
-Örneğin:
-
-n = 10.000 poliçe
-T = 20 yıl
-
-ise:
-
-Toplam projeksiyon satırı
-=
-n × T
-=
-200.000 satır
-
-Bu kadar büyük hesaplama hacmi nedeniyle,
-geleneksel döngüler yerine vektörize ve matris tabanlı hesaplama tercih edilir.
-
-
-===========================================================
-2) TEMEL SİGORTA PROJEKSİYON MANTIĞI
-===========================================================
-
-Her poliçe-yıl kombinasyonu için engine aşağıdakileri hesaplar:
-
-> Yaşam Olasılığı
-> Ölüm Olasılığı
-> Lapse Olasılığı
-> Aktif Poliçe Durumu
-> Prim Nakit Akışları
-> Hasar Nakit Akışları
-> Gider Nakit Akışları
-> Net Nakit Akışları
-> İskontolanmış Nakit Akışları
+> yas ve in-force durumu
+> mortalite ve lapse varsayimlari
+> survival ratio
+> prim, hasar, gider, surrender ve reasurans nakit akislari
+> bugunku deger nakit akislari
 > BEL
 > Risk Adjustment
 > CSM
-> OCI hareketleri
-
-Bu hesaplamalar birlikte IFRS 17 yükümlülük yapısını oluşturur.
+> IFRS 17 gruplama
+> senaryo sonuclari
 
 
 ===========================================================
-3) YAŞAM OLASILIĞI
+2) MORTALITE, LAPSE VE SURVIVAL
 ===========================================================
 
-Tanım:
+Mortalite:
 
-q_x = x yaşındaki kişinin ölüm olasılığı
-
-Buna göre:
-
-p_x = 1 - q_x
-
-Burada:
-
-p_x = yıllık yaşama olasılığıdır.
-
-Başlangıçta:
-
-Survival(0) = 1
-
-çünkü tüm poliçeler başlangıçta aktif kabul edilir.
-
-İleri yıllar için:
-
-Survival(t)
+qx(t)
 =
-Survival(t-1)
-×
-(1 - q_{x+t-1})
+current_age'e gore mortalite tablosundan okunan oran
 
-Bu yapı zaman boyunca kümülatif yaşama olasılığı üretir.
+Tablo kullanilmiyorsa:
 
-
-===========================================================
-4) ÖLÜM OLASILIĞI
-===========================================================
-
-Ölüm olasılığı, ölümün ilgili yıl içinde gerçekleşme olasılığıdır.
-
-Formül:
-
-Death_Probability(t)
+qx(t)
 =
-Survival(t-1)
-×
-q_{x+t-1}
+base_mort_rate + age_factor * (current_age - min_issue_age)
 
-Bu düzeltme gereklidir çünkü ölüm yalnızca sigortalı ilgili yılın başına kadar hayatta kaldıysa gerçekleşebilir.
+Senaryo mortalite soku:
 
-
-===========================================================
-5) LAPSE OLASILIĞI
-===========================================================
-
-Lapse olasılığı, sigortalının sözleşmeyi gönüllü şekilde sonlandırma olasılığıdır.
-
-Basitleştirilmiş yapı:
-
-Lapse_Probability(t)
+qx_scenario(t)
 =
-Persistency(t-1)
-×
-lapse_rate
+clip(qx(t) * mortality_shock_multiplier + mortality_shock, 0, 1)
 
-Persistency gelişimi:
+Lapse:
 
-Persistency(t)
+lapse_rate(t)
 =
-Persistency(t-1)
-×
-(1 - lapse_rate)
+lapse_base_rate * exp(-lapse_decay * (t - 1))
 
-Başlangıçta:
+Survival multiplier:
 
-Persistency(0) = 1
-
-
-===========================================================
-6) AKTİF POLİÇE DURUMU
-===========================================================
-
-Bir poliçenin aktif kalabilmesi için:
-
-> Sigortalının hayatta olması
-ve
-> Poliçenin lapse olmaması gerekir.
-
-Dolayısıyla:
-
-Active(t)
+survival_multiplier(t)
 =
-Survival(t)
-×
-Persistency(t)
+(1 - qx(t)) * (1 - lapse_rate(t))
 
-Bu değişken çok önemlidir çünkü primler, giderler ve coverage unit hesapları aktif poliçeye bağlıdır.
+Yil basi survival ratio:
 
-
-===========================================================
-7) PRİM NAKİT AKIŞLARI
-===========================================================
-
-Beklenen prim girişleri:
-
-Premium_CF(t)
+survival_ratio(t)
 =
-Premium
-×
-Active(t)
+1'den t-1'e kadar survival multiplier carpimi
 
-Eğer prim ödeme süresi sona ermişse:
-
-Premium_CF(t) = 0
-
-şu koşulda:
-
-t > premium_payment_term
+Bu nedenle Year 1 icin survival_ratio = 1.
 
 
 ===========================================================
-8) HASAR NAKİT AKIŞLARI
+3) PRIM VE NAKIT AKISI MANTIGI
 ===========================================================
 
-Beklenen hasar çıkışları:
+Brut prim girisi:
 
-Claim_CF(t)
+Gross_Premium_Inflow(t)
 =
-Sum_Assured
-×
-Death_Probability(t)
+in_force(t) * survival_ratio(t) * gross_annual_premium
 
-Genel sigortacılık mantığı:
+Olum tazminati:
 
-Beklenen Hasar
+Death_Benefits(t)
 =
-Teminat Tutarı
-×
-Olay Olasılığı
+in_force(t) * survival_ratio(t) * qx(t) * sum_assured
 
-Bu yapı aktüeryal değerleme modellerinin temelidir.
+Surrender benefit:
 
-
-===========================================================
-9) GİDER NAKİT AKIŞLARI
-===========================================================
-
-Giderler ikiye ayrılır:
-
-> İlk Edinim Giderleri
-> Devam Eden Bakım Giderleri
-
-İlk edinim gideri:
-
-Acquisition_CF(0)
+Surrender_Benefit(t)
 =
-Acquisition_Cost
+in_force(t) * survival_ratio(t) * lapse_rate(t)
+* max(net_annual_premium - surrender_charge(t), 0)
 
-Bakım giderleri:
+Operasyonel gider:
 
-Expense_CF(t)
+Operating_Expenses(t)
 =
-Maintenance_Expense
-×
-Active(t)
+in_force(t) * survival_ratio(t) * (1 - lapse_rate(t)) * total_expense(t)
 
-Örnek giderler:
+Reasurans ceding:
 
-> Komisyon ödemeleri
-> Operasyonel giderler
-> Yönetim giderleri
-> Hasar yönetim giderleri
-> IT altyapı giderleri
-
-
-===========================================================
-10) NET NAKİT AKIŞI YAPISI
-===========================================================
-
-Net beklenen nakit akışı:
-
-Net_CF(t)
+Reinsurance_Ceding(t)
 =
-Premium_CF(t)
--
-Claim_CF(t)
--
-Expense_CF(t)
+Gross_Premium_Inflow(t) * reinsurance_cost_rate
 
-Pozitif değerler beklenen kârlılığı gösterir.
+Reasurans recovery:
 
-Negatif değerler ise beklenen zarar veya yüksek yükümlülük çıkışı anlamına gelir.
-
-
-===========================================================
-11) İSKONTO MANTIĞI
-===========================================================
-
-IFRS 17 gelecekteki nakit akışlarının zaman değerine göre iskonto edilmesini zorunlu kılar.
-
-Bugünkü değer formülü:
-
-PV(CF_t)
+Reinsurance_Recovery(t)
 =
-CF_t / (1+r)^t
+Death_Benefits(t) * reinsurance_cost_rate
 
-Burada:
+Karsi taraf default maliyeti:
 
-CF_t = gelecekteki nakit akışı
-r    = iskonto oranı
-
-Toplam iskonto edilmiş değer:
-
-PV_Total
+Counterparty_Default_Cost(t)
 =
-Σ PV(CF_t)
+Reinsurance_Recovery(t) * counterparty_pd * counterparty_lgd
 
-Engine şu yapıları destekleyebilir:
+Net nakit akisi:
 
-> Locked-in discount rate
-> Current discount rate
-> Yield curve
-> Senaryo bazlı faiz yapıları
+Net_Cash_Flow(t)
+=
+Total_Inflows(t) - Total_Outflows(t)
 
 
 ===========================================================
-12) BEST ESTIMATE LIABILITY (BEL)
+4) ISKONTO VE ZAMANLAMA KONVANSIYONU
 ===========================================================
 
-BEL, beklenen gelecekteki fulfilment cashflow’ların iskonto edilmiş değeridir.
+Donem sonu iskonto faktoru:
 
-Basitleştirilmiş yapı:
+discount_factor(t)
+=
+1 / (1 + r)^t
+
+Donem basi iskonto faktoru:
+
+discount_factor_opening(t)
+=
+1 / (1 + r)^(t - 1)
+
+Engine zamanlama konvansiyonu:
+
+> Prim girisleri: donem basi iskonto faktoru
+> Reasurans ceding primleri: donem basi iskonto faktoru
+> Hasarlar: donem sonu iskonto faktoru
+> Giderler: donem sonu iskonto faktoru
+> Surrender benefit: donem sonu iskonto faktoru
+> Reasurans recoveries: donem sonu iskonto faktoru
+> Karsi taraf default maliyeti: donem sonu iskonto faktoru
+
+Toplam PV inflow:
+
+PV_Total_Inflows
+=
+PV_Gross_Premium_Inflow + PV_Reinsurance_Recovery
+
+Toplam PV outflow:
+
+PV_Total_Outflows
+=
+PV_Net_Death_Benefit
++ PV_Surrender_Benefit
++ PV_Operating_Expenses
++ PV_Reinsurance_Ceding
++ PV_Counterparty_Default_Cost
+
+PV net cashflow:
+
+PV_Net_Cash_Flow
+=
+PV_Total_Inflows - PV_Total_Outflows
+
+
+===========================================================
+5) BEST ESTIMATE LIABILITY (BEL)
+===========================================================
+
+Engine liability-positive BEL konvansiyonu kullanir:
 
 BEL
 =
-PV(Claims + Expenses - Premiums)
+PV(Outflows) - PV(Inflows)
 
-Eşdeğer form:
+Esdeger form:
 
 BEL
 =
-- PV(Net_CF)
+-PV(Net_Cash_Flow)
 
-BEL her projeksiyon döneminde yeniden hesaplanır.
+Yorum:
 
+> BEL > 0 net yukumluluk anlamina gelir.
+> BEL < 0 net varlik pozisyonu anlamina gelir.
 
-===========================================================
-13) RISK ADJUSTMENT (RA)
-===========================================================
+BEL icinde ayarlanmis mortalite ve surrender varsayimlari kullanilir:
 
-IFRS 17 finansal olmayan risk belirsizliği için ek marj gerektirir.
-
-Basitleştirilmiş yapı:
-
-RA
+Adjusted_qx(t)
 =
-CoC_Ratio
-×
-BEL
+qx(t) * (1 - lapse_mortality_correlation * lapse_rate(t))
 
-Burada:
-
-CoC_Ratio
+Adjusted_Death_Benefits(t)
 =
-Cost of Capital benzeri risk parametresi
+in_force(t) * survival_ratio(t) * adjusted_qx(t) * sum_assured
 
-Gerçek dünyada kullanılan yöntemler:
+BEL liability cashflow:
 
-> Confidence Level
-> Tail Value at Risk
-> Stochastic simulation
-> Cost of Capital frameworkleri
-
-
-===========================================================
-14) CONTRACTUAL SERVICE MARGIN (CSM)
-===========================================================
-
-CSM kazanılmamış gelecekteki kârı temsil eder.
-
-Başlangıç CSM’i:
-
-CSM_Initial
+PV_Adjusted_Liability_Cash_Flow(t)
 =
-- (BEL + RA)
+PV(claims + surrender + expenses + reinsurance ceding + default cost)
+- PV(premiums + reinsurance recovery)
 
-şu durumda:
+Police BEL:
 
-(BEL + RA) < 0
-
-Eğer sözleşme zarar ediyorsa:
-
-CSM = 0
-
-ve Loss Component oluşabilir.
-
-IFRS 17’ye göre gelecekteki kâr hemen muhasebeleştirilemez.
+BEL(i)
+=
+t yillari boyunca PV_Adjusted_Liability_Cash_Flow(i, t) toplami
 
 
 ===========================================================
-15) LOSS COMPONENT
+6) RISK ADJUSTMENT (RA)
 ===========================================================
 
-Eğer fulfilment cashflow’lar olumsuzsa:
+Risk Adjustment, finansal olmayan risk belirsizligi icin talep edilen marji
+temsil eder.
 
-BEL + RA > 0
+Mevcut engine basitlestirilmis stochastic confidence-level yaklasimi kullanir:
 
-ise:
+RA(i)
+=
+CoC_Ratio * max(Quantile_alpha(PV_Liability(i)) - Mean(PV_Liability(i)), 0)
 
-Loss_Component
+Simule edilen liability dagilimi BEL ile ayni liability-positive zamanlama
+konvansiyonunu kullanir.
+
+Basitlestirilmis risk suruculeri:
+
+> mortalite volatilitesi
+> lapse volatilitesi
+> gider volatilitesi
+> karsi taraf default olaylari
+> reasurans ceding ve recovery etkileri
+
+Config parametreleri:
+
+> confidence_level
+> n_risk_scenarios
+> coc_ratio
+> ra_mortality_sigma
+> ra_lapse_sigma
+> ra_expense_sigma
+
+Risk decomposition fonksiyonu yalnizca toplam RA dondurur. Sabit yuzdeli
+dagilimlar gercek bir risk attribution kosusu olmadan yaniltici olacagi icin
+kullanilmaz.
+
+
+===========================================================
+7) CONTRACTUAL SERVICE MARGIN (CSM)
+===========================================================
+
+CSM kazanilmamis gelecekteki kari temsil eder.
+
+Onemli konvansiyon:
+
+BEL zaten prim girislerini icerir. Bu nedenle CSM formulu icinde primler ikinci
+kez dusulmez.
+
+CSM oncesi toplam yukumluluk:
+
+Total_Liability
 =
 BEL + RA
 
-Bu tutar doğrudan kâr/zarara yazılır.
+Baslangic CSM:
+
+Initial_CSM
+=
+max(-(BEL + RA), 0)
+
+Onerous loss:
+
+Onerous_Loss
+=
+max(BEL + RA, 0)
+
+Yorum:
+
+> BEL + RA < 0 ise sozlesme/grup karlidir ve CSM pozitiftir.
+> BEL + RA > 0 ise sozlesme/grup onerous kabul edilir ve CSM sifirdir.
+
+PV premiums ciktilarda mutabakat bilgisi olarak tutulur, fakat CSM formulunde
+ek bir indirim kalemi olarak kullanilmaz.
 
 
 ===========================================================
-16) COVERAGE UNITS
+8) CSM RELEASE VE ROLLFORWARD
 ===========================================================
 
-Coverage unit yapısı CSM’in zamana yayılmasını belirler.
-
-Basitleştirilmiş yapı:
+Coverage unit:
 
 Coverage_Unit(t)
 =
-Sum_Assured
-×
-Active(t)
+in_force(t) * survival_ratio(t) * (1 - lapse_rate(t))
 
-Kalan toplam coverage:
+Toplam coverage unit:
 
-Remaining_Coverage(t)
+Total_Coverage
 =
-Σ gelecekteki coverage unitler
+projeksiyon yillari boyunca Coverage_Unit(t) toplami
 
 CSM release:
 
 CSM_Release(t)
 =
-Opening_CSM
-×
-Coverage_Unit(t)
-/
-Remaining_Coverage(t)
+Opening_CSM * Coverage_Unit(t) / Total_Coverage
 
-Bu yapı hizmet bazlı kâr dağılımı sağlar.
+Engine tek reporting-period rollforward uretir. Bu nedenle csm_results.csv
+icindeki release, config icindeki reporting_year icin hesaplanir.
 
+Finance cost / accretion:
 
-===========================================================
-17) CSM ROLLFORWARD
-===========================================================
-
-CSM zaman boyunca hareket eder.
-
-Basitleştirilmiş yapı:
-
-Closing_CSM(t)
+Finance_Cost
 =
-Opening_CSM(t)
-+
-Interest_Accretion(t)
--
-CSM_Release(t)
+Opening_CSM * accretion_rate
 
-Faiz eklenmesi:
+Varsayilan olarak accretion_rate config icindeki discount_rate degeridir.
+Prior locked rate verilirse o oran kullanilir.
 
-Interest_Accretion(t)
+Kapanis CSM:
+
+CSM_Closing_Raw
 =
-Opening_CSM(t)
-×
-locked_in_rate
+CSM_Opening + Finance_Cost - CSM_Release - Unlocking_Adjustment
 
-IFRS 17 CSM için locked-in rate kullanımını zorunlu tutar.
+Raporlanan CSM:
 
-
-===========================================================
-18) LIABILITY FOR REMAINING COVERAGE (LRC)
-===========================================================
-
-Basitleştirilmiş yapı:
-
-LRC
+CSM_Closing
 =
-BEL
-+
-RA
-+
-CSM
-
-LRC sigorta hizmeti verildikçe azalır.
+max(CSM_Closing_Raw, 0)
 
 
 ===========================================================
-19) LIABILITY FOR INCURRED CLAIMS (LIC)
+9) IFRS 17 GRUPLAMA
 ===========================================================
 
-LIC gerçekleşmiş sigortalı olaylara ilişkin yükümlülükleri temsil eder.
+Engine sozlesmeleri su boyutlarla gruplar:
 
-Örnekler:
+> business nature
+> risk level
+> lapse risk
+> onerous status
 
-> Raporlanmış hasarlar
-> IBNR hasarlar
-> Hasar ödeme giderleri
+Gruplama policy-level yapilir, policy-year level yapilmaz.
 
-Bu projede LIC detaylı ayrı modellenmemiştir.
+Bu nedenle:
 
-
-===========================================================
-20) OCI MANTIĞI
-===========================================================
-
-OCI finansal piyasa dalgalanmalarını sigorta hizmet sonucundan ayırır.
-
-Basitleştirilmiş yapı:
-
-OCI
+Group policy count
 =
-Current_Rate_Valuation
--
-Locked_In_Rate_Valuation
+gruptaki tekil policy_id sayisi
 
-Amaç:
+Group total sum assured
+=
+her policenin sum_assured degerinin bir kez toplanmasi
 
-Faiz oranı değişimlerinden kaynaklanan muhasebe volatilitesini azaltmak.
+Grup ciktisi:
 
-
-===========================================================
-21) GROUPING MANTIĞI
-===========================================================
-
-IFRS 17 sözleşmelerin gruplandırılmasını zorunlu tutar.
-
-Gruplama kriterleri:
-
-> Portföy
-> Karlılık
-> İhraç yılı
-> Risk karakteristiği
-
-Tipik gruplar:
-
-> Onerous contracts
-> Profitable contracts
-> Low-risk contracts
+outputs/group_results.csv
 
 
 ===========================================================
-22) PROJECTION PIPELINE
+10) SENARYO ANALIZI
 ===========================================================
 
-Ana pipeline yapısı:
+Senaryo kosulari, soklanmis varsayimlar altinda projection, cashflows, BEL, RA
+ve CSM hesaplarini bastan kurar.
 
-config
-→ assumptions
-→ discount curves
-→ policy generation
-→ mortality and lapse
-→ premium calculations
-→ claim calculations
-→ expense calculations
-→ net cashflows
-→ discounting
-→ BEL
-→ RA
-→ CSM
-→ grouping
-→ OCI
-→ outputs
+Mevcut senaryo ciktisi:
 
+> scenario
+> n_policies
+> Total_BEL
+> Total_RA
+> Total_CSM_Opening
+> Total_CSM_Closing
+> Onerous_Count
+> Onerous_Loss
 
-===========================================================
-23) MORTALITY TABLE YAPISI
-===========================================================
+Tipik soklar:
 
-Engine iki farklı mortality yapısını destekler:
-
-1)
-mortality_table.csv
-
-2)
-Fallback qx() function
-
-Eğer mortality table mevcutsa,
-engine dış veri kullanır.
-
-Aksi halde mortality dinamik qx() fonksiyonu ile üretilir.
+> mortality_up_10
+> lapse_up_20
+> expense_up_15
+> discount_down_100bps
 
 
 ===========================================================
-24) MATRİS HESAPLAMA MANTIĞI
+11) CIKTILAR
 ===========================================================
 
-Büyük ölçekli aktüeryal hesaplamalar verimli hesaplama yapısı gerektirir.
+Engine su dosyalari yazar:
 
-Bu nedenle engine:
+> outputs/master_results.csv
+> outputs/projection_results.csv
+> outputs/bel_results.csv
+> outputs/ra_results.csv
+> outputs/csm_results.csv
+> outputs/group_results.csv
+> outputs/scenario_results.csv
+> outputs/ifrs17_term_life_projection.xlsx
 
-> Pandas vectorization
-> NumPy calculations
-> Matrix transformations
+Excel ciktisi su parametreyle kapatilabilir:
 
-kullanır.
+excel_output = false
 
-Avantajları:
+Excel dosya yolu su parametreyle belirlenir:
 
-> Daha hızlı çalışma
-> Ölçeklenebilirlik
-> Daha temiz hesaplama yapısı
-> Daha kolay rollforward analizi
-
-
-===========================================================
-25) VALIDATION VE KONTROL MEKANİZMASI
-===========================================================
-
-Engine mantıksal hataları yakalamak için kontrol mekanizmaları içerir.
-
-Örnekler:
-
-> Negatif olasılıklar
-> 1’den büyük survival oranı
-> Geçersiz discount factor
-> Eksik projeksiyon yılı
-> Hatalı cashflow dengesi
-> Eksik config değerleri
-
-Aktüeryal modellemede:
-
-Bir modelin çalışması,
-matematiksel olarak doğru olduğu anlamına gelmez.
+output_path
 
 
 ===========================================================
-26) EĞİTİMSEL AMAÇ
+12) SON NOT
 ===========================================================
 
-Bu proje temel olarak:
-
-> IFRS 17 öğrenmek
-> Aktüeryal projeksiyon mantığını anlamak
-> Sigorta matematiği pratiği yapmak
-> Liability rollforward mantığını öğrenmek
-> Ölçeklenebilir finansal modelleme yapmak
-> Sigorta muhasebesi yapısını anlamak
-
-amaçlarıyla geliştirilmiştir.
-
-Buradaki formüller gerçek dünyadaki aktüeryal sistemlerin sadeleştirilmiş eğitimsel versiyonlarıdır.
-
-
-===========================================================
-27) SON NOT
-===========================================================
-
-Bu proje öğrenme süreci boyunca birçok kez yeniden yazılmıştır.
-
-Yapı şu alanları birleştirmeyi amaçlamaktadır:
-
-> Aktüeryal matematik
-> Sigorta projeksiyon mantığı
-> Finansal raporlama mekanikleri
-> IFRS 17 ölçüm prensipleri
-> Ölçeklenebilir vektörize hesaplamalar
-
-Projede hâlâ hata,
-aşırı sadeleştirme
-veya eksik yorumlar bulunabilir.
-
-Eğer hata veya tutarsızlık fark ederseniz,
-lütfen bildiriniz.
-
-Çünkü aktüeryal modelleme sürekli inceleme ve iterasyon ile gelişir.
+Bu dokuman mevcut basitlestirilmis engine davranisini aciklar. Gercek IFRS 17
+uretim modelleri aktueryal kalibrasyon, governance, audit kontrolu, veri
+validasyonu, locked-in/current curve politika secimleri ve resmi muhasebe
+metodolojisi onayi gerektirir.

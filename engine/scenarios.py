@@ -36,6 +36,7 @@ from engine.bel import calculate_bel
 #Bu, senaryoların çalıştırılması sırasında kullanılacak Best Estimate Liability (BEL) hesaplamak için kullanılan fonksiyonu içe aktarır.
 
 from engine.ra import calculate_risk_adjustment
+from engine.csm import calculate_csm_rollforward
 #Bu, senaryoların çalıştırılması sırasında kullanılacak Risk Adjustment (RA) hesaplamak için kullanılan fonksiyonu içe aktar
 
 
@@ -138,6 +139,12 @@ def run_single_scenario(
         #Bu, projeksiyon tablosunu kullanarak Best Estimate Liability (BEL) hesaplar sonuçları bel_result DataFrame'ine atar.
 
         ra_result = calculate_risk_adjustment(projection, config)
+        csm_result = calculate_csm_rollforward(
+            bel_result,
+            ra_result,
+            projection,
+            config,
+        )
         #Bu, projeksiyon tablosunu kullanarak Risk Adjustment (RA) hesaplar sonuçları ra_result DataFrame'ine atar.
 
        #Karşılaştırma döngüsü ile BEL sütununu kontrol ediyoruz. 
@@ -157,6 +164,11 @@ def run_single_scenario(
         else:
             total_ra = float("nan")
 
+        total_csm_opening = float(csm_result["csm_opening"].sum())
+        total_csm_closing = float(csm_result["csm_closing"].sum())
+        onerous_count = int(csm_result["is_onerous"].sum())
+        onerous_loss = float(csm_result["onerous_loss"].sum())
+
         #Sonuç olarak Senaryo yanıtlarını çevirir.
         return {
             "scenario": index, #Senaryo adını belirtir.
@@ -167,6 +179,10 @@ def run_single_scenario(
             "Total_BEL": total_bel,
             # Bu, senaryoda hesaplanan toplam Best Estimate Liability (BEL) değerini belirtir.
             "Total_RA": total_ra,
+            "Total_CSM_Opening": total_csm_opening,
+            "Total_CSM_Closing": total_csm_closing,
+            "Onerous_Count": onerous_count,
+            "Onerous_Loss": onerous_loss,
             # Bu, senaryoda hesaplanan toplam Risk Adjustment (RA) değerini belirtir.
         }
 
@@ -209,6 +225,15 @@ def run_scenarios(
                 results.append(r)
 
     if not results:
-        return pd.DataFrame(columns=["scenario", "n_policies", "Total_BEL", "Total_RA"])
+        return pd.DataFrame(columns=[
+            "scenario",
+            "n_policies",
+            "Total_BEL",
+            "Total_RA",
+            "Total_CSM_Opening",
+            "Total_CSM_Closing",
+            "Onerous_Count",
+            "Onerous_Loss",
+        ])
 
     return pd.DataFrame(results).sort_values("scenario").reset_index(drop=True)
