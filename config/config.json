@@ -43,6 +43,7 @@
 
     "excel_output": true,
     "output_path": "output/ifrs17_results.xlsx",
+    "use_float64": true,
 
     "mortality_table_path": "data/mortality_table.csv",
     "use_mortality_table": true,

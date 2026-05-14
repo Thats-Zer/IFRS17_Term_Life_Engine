@@ -1,13 +1,9 @@
 # engine/projection.py
 
-from typing import Optional 
-import sys 
+from typing import Optional
 from pathlib import Path
 from functools import lru_cache
 import logging
-
-# Add project root to path
-sys.path.insert(0, str(Path(__file__).parent.parent))
 
 import numpy as np
 import pandas as pd
@@ -200,6 +196,8 @@ def create_master_data(config: ModelConfig) -> pd.DataFrame:
             sigma=0.8,
             size=config.n_policies
         ).astype(np.float32)
+        ,
+        "coverage_years": np.full(config.n_policies, int(getattr(config, "coverage_years", config.projection_years)), dtype=np.int16),
     })
     
     logger.info(f"✓ Master data oluşturuldu: {len(master_data)} poliçe")
@@ -238,9 +236,9 @@ def create_year_age_grid(
         "Year": np.tile(years, len(master_data))
     })
     
-    # issue_age merge et
+    # issue_age + coverage_years merge et
     grid = grid.merge(
-        master_data[["policy_id", "issue_age"]],
+        master_data[["policy_id", "issue_age", "coverage_years"]],
         on="policy_id",
         how="left"
     )
@@ -255,8 +253,12 @@ def create_year_age_grid(
         "policy_id": np.int32,
         "Year": np.int32,
         "current_age": np.int16,
-        "issue_age": np.int16
+        "issue_age": np.int16,
+        "coverage_years": np.int16,
     })
+
+    # in_force: coverage döneminde mi?
+    grid["in_force"] = (grid["Year"] <= grid["coverage_years"]).astype(bool)
     
     # NaN kontrolü
     if grid.isna().any().any():
@@ -345,11 +347,26 @@ def attach_mortality_and_lapse(
     # MORTALITE ORANI
     # ===============================================
     
+    mortality_mult = float(getattr(config, "mortality_shock_multiplier", 1.0) or 1.0)
+    mortality_add = float(getattr(config, "mortality_shock", 0.0) or 0.0)
+
     if mortality_table is not None:
-        # Tabulodan lookup (vectorized)
-        projection["qx"] = projection["current_age"].apply(
-            lambda age: get_mortality_rate(age, mortality_table)
-        ).astype(np.float32)
+        # Tablodan lookup (vektörize): numpy.interp ile (out-of-range clamp dahil)
+        mt = mortality_table.sort_values("age")
+        ages = mt["age"].to_numpy(dtype=np.float32, copy=False)
+        qx_vals = mt["qx"].to_numpy(dtype=np.float32, copy=False)
+        if ages.size == 0:
+            raise ValueError("Mortality table is empty")
+
+        proj_age = projection["current_age"].to_numpy(dtype=np.float32, copy=False)
+        qx_interp = np.interp(
+            proj_age,
+            ages,
+            qx_vals,
+            left=float(qx_vals[0]),
+            right=float(qx_vals[-1]),
+        )
+        projection["qx"] = qx_interp.astype(np.float32)
         logger.debug(f"✓ Mortalite oranları tablodan alındı")
     
     else:
@@ -357,18 +374,23 @@ def attach_mortality_and_lapse(
         projection["qx"] = (
             config.base_mort_rate
             + (projection["current_age"] - config.min_issue_age) * config.mortality_age_factor
-            + config.mortality_shock
         ).astype(np.float32)
-        projection["qx"] = projection["qx"].clip(0, 1)
         logger.debug(f"✓ Mortalite oranları formülden hesaplandı")
+
+    # Şokları her durumda uygula: multiplier + additive
+    projection["qx"] = (projection["qx"] * mortality_mult + mortality_add).clip(0, 1).astype(np.float32)
     
     # ===============================================
     # LAPSE ORANI
     # ===============================================
     
+    lapse_mult = float(getattr(config, "lapse_initial_rate_multiplier", 1.0) or 1.0)
+    lapse_initial = float(config.lapse_base_rate) * lapse_mult
+    lapse_initial = float(np.clip(lapse_initial, 0.0, 1.0))
+
     lapse_array = get_exponential_lapse(
         projection["Year"].values,
-        initial_rate=config.lapse_base_rate,
+        initial_rate=lapse_initial,
         decay=config.lapse_decay
     )
     projection["lapse_rate"] = lapse_array
@@ -377,11 +399,11 @@ def attach_mortality_and_lapse(
     # SURVIVAL PROBABILITY (KÜMÜLATIF)
     # ===============================================
     
-    # Yıl içi survival (competing decrements - yıllık olasılık yaklaşımı):
-    #   survive_t = 1 - qx_t - lapse_t
-    # Not: qx ve lapse_rate yıllık olasılıklar olarak ele alınıyor.
+    # Yıl içi survival (competing decrements - bağımsız yıllık yaklaşım):
+    #   survive_t = (1 - qx_t) * (1 - lapse_t)
+    # Not: Bu, 1 - qx - lapse yaklaşımına göre daha tutarlı bir competing-decrements varsayımıdır.
     projection["survival_multiplier"] = (
-        (1 - projection["qx"] - projection["lapse_rate"])
+        ((1 - projection["qx"]) * (1 - projection["lapse_rate"]))
         .clip(0, 1)
         .astype(np.float32)
     )

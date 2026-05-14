@@ -18,6 +18,12 @@ def validate_config(config: ModelConfig) -> None:
     # Config parametrelerini valide et
     if config.discount_rate < 0 or config.discount_rate > 1:
         raise ValueError(f"discount_rate [0, 1] aralığında olmalı, {config.discount_rate} verildi")
+
+    # Senaryo şoku varsa efektif oranı da kontrol et
+    shift = float(getattr(config, "discount_rate_shift", 0.0) or 0.0)
+    effective_rate = float(config.discount_rate) + shift
+    if effective_rate <= -0.999:
+        raise ValueError(f"discount_rate_shift çok büyük negatif: effective_rate={effective_rate}")
     
     # Coc ratio genelde %6 civarında olur, ancak sınırları esnetebiliriz
     if config.coc_ratio < 0 or config.coc_ratio > 1:
@@ -66,7 +72,9 @@ def tax_adjusted_discount_factor(config: ModelConfig) -> float:
 
     # Config'u valide et
     validate_config(config)
-    return 1 / (1 + config.discount_rate)
+    shift = float(getattr(config, "discount_rate_shift", 0.0) or 0.0)
+    effective_rate = float(config.discount_rate) + shift
+    return 1 / (1 + effective_rate)
 
 
 def create_discount_curve(config: ModelConfig) -> pd.DataFrame:
@@ -124,10 +132,11 @@ def get_exponential_lapse(
 
     """
     Üssel azalan lapse oranı hesapla.
-    
-    UYARI: Bu fonksiyon mortalite gibi uzun dönem ürünlerde
-    ilk yıllarda düşük lapse varsayar (yanlış!).
-    Gerçek hayatta: yıl 1-2'de yüksek, sonra sabit.
+
+    Not: Bu fonksiyon basit bir "exponential decay" yaklaşımıdır.
+    Bazı ürünlerde ilk yıllarda lapse daha yüksek olabilir (front-loaded),
+    bazı ürünlerde ise daha düşük olabilir. Bu nedenle `initial_rate` ve
+    `decay` parametreleri ürün davranışına göre kalibre edilmelidir.
     
     Bu formül tercih edilirse, decay parametresi şu anlama gelir:
     - decay = 0: sabit lapse (initial_rate)

@@ -1,29 +1,636 @@
-Starting Note: I have rewrite this project,again and again,
-I have thought again and again. so, if there's a mistake please notify me.
+IFRS17 TERM LIFE ENGINE
+FORMULA & LOGIC PAPER
 
-The Logic Behind These Codes and IFRS17 Standart
- 
-let's naming our projection period as t and the number of insurance policies at our portfolio as n;
-We need to calculate some values per year by per policy.
-So, it means if we had 10 year period and 10000 policies at or portfolio,
-we need to calculate 10*10000=100000  individual values per column. 
-In these kind of situations, using matrix calc. is one of the easiest ways.
 
-let's start to intoduce this project...
+Starting Note
 
-=>>>>>>>>> Policy Projection Structure
+This project was rewritten many times while learning actuarial modeling,
+financial mathematics, and IFRS 17 measurement logic.
 
-Every single policy in our portfolio is projected by year by year from 0 point to our final point or with the it's other name, t.
-And for this individual  projections the engine calculates;
->Survival Probability
->Mortality Probability
->Lapse Probability
->Premium
->Claim
->Expenses
->Discounting
->BEL
-> Risk Adjusment
->CSM Movements
+The purpose of this document is to explain the mathematical and conceptual structure behind the engine.
 
-Pro
+The formulas and structures shown here are intentionally simplified for educational clarity.
+
+The project may still contain mistakes or incomplete interpretations.
+If you notice any inconsistency, please report it.
+
+
+===========================================================
+1) GENERAL MODEL STRUCTURE
+===========================================================
+
+Let:
+
+t  = projection year
+i  = policy index
+n  = number of policies
+T  = total projection horizon
+
+The engine projects every insurance policy separately through time.
+
+Mathematically:
+
+Projection(i,t)
+
+This means:
+
+for every policy i
+and every projection year t,
+
+the engine calculates all required insurance cashflows and liability movements.
+
+If:
+
+n = 10,000 policies
+T = 20 years
+
+then:
+
+Total Projection Rows
+=
+n × T
+=
+200,000 rows
+
+Because of this large calculation volume,
+vectorized matrix-style calculations are preferred instead of traditional loops.
+
+
+===========================================================
+2) CORE INSURANCE PROJECTION LOGIC
+===========================================================
+
+For every policy-year combination,
+the engine calculates:
+
+> Survival Probability
+> Mortality Probability
+> Lapse Probability
+> Active Policy Status
+> Premium Cashflows
+> Claim Cashflows
+> Expense Cashflows
+> Net Cashflows
+> Discounted Cashflows
+> BEL
+> Risk Adjustment
+> CSM
+> OCI movements
+
+These calculations together create the IFRS 17 liability structure.
+
+
+===========================================================
+3) SURVIVAL PROBABILITY
+===========================================================
+
+Let:
+
+q_x = mortality probability at age x
+
+Then:
+
+p_x = 1 - q_x
+
+where:
+
+p_x = annual survival probability
+
+At inception:
+
+Survival(0) = 1
+
+because all policies are initially assumed active.
+
+For future years:
+
+Survival(t)
+=
+Survival(t-1)
+×
+(1 - q_{x+t-1})
+
+This creates cumulative survival probability through time.
+
+
+===========================================================
+4) MORTALITY PROBABILITY
+===========================================================
+
+Mortality probability represents the probability that death occurs during year t.
+
+The formula is:
+
+Death_Probability(t)
+=
+Survival(t-1)
+×
+q_{x+t-1}
+
+This adjustment is necessary because death may only occur if the policyholder survives until the beginning of that year.
+
+
+===========================================================
+5) LAPSE PROBABILITY
+===========================================================
+
+Lapse probability represents the probability that the policyholder terminates the contract voluntarily.
+
+Simplified form:
+
+Lapse_Probability(t)
+=
+Persistency(t-1)
+×
+lapse_rate
+
+Persistency evolves as:
+
+Persistency(t)
+=
+Persistency(t-1)
+×
+(1 - lapse_rate)
+
+At inception:
+
+Persistency(0) = 1
+
+
+===========================================================
+6) ACTIVE POLICY STATUS
+===========================================================
+
+A policy must both survive and remain in-force.
+
+Therefore:
+
+Active(t)
+=
+Survival(t)
+×
+Persistency(t)
+
+This variable is one of the most important projection variables because premiums, expenses, and coverage units depend on active contracts.
+
+
+===========================================================
+7) PREMIUM CASHFLOWS
+===========================================================
+
+Expected premium inflows are calculated as:
+
+Premium_CF(t)
+=
+Premium
+×
+Active(t)
+
+If premium payment term expires:
+
+Premium_CF(t) = 0
+
+for:
+
+t > premium_payment_term
+
+
+===========================================================
+8) CLAIM CASHFLOWS
+===========================================================
+
+Expected claim outflows:
+
+Claim_CF(t)
+=
+Sum_Assured
+×
+Death_Probability(t)
+
+General insurance logic:
+
+Expected Claim
+=
+Benefit Amount
+×
+Probability of Event
+
+This structure forms the foundation of actuarial valuation models.
+
+
+===========================================================
+9) EXPENSE CASHFLOWS
+===========================================================
+
+Expenses are separated into:
+
+> Acquisition Expenses
+> Maintenance Expenses
+
+Initial acquisition expense:
+
+Acquisition_CF(0)
+=
+Acquisition_Cost
+
+Maintenance expenses:
+
+Expense_CF(t)
+=
+Maintenance_Expense
+×
+Active(t)
+
+Examples:
+
+> Commission payments
+> Operational expenses
+> Administration costs
+> Claims handling expenses
+> IT infrastructure costs
+
+
+===========================================================
+10) NET CASHFLOW STRUCTURE
+===========================================================
+
+Net expected cashflows:
+
+Net_CF(t)
+=
+Premium_CF(t)
+-
+Claim_CF(t)
+-
+Expense_CF(t)
+
+Positive values indicate expected profit generation.
+
+Negative values indicate expected losses or heavy insurance outflows.
+
+
+===========================================================
+11) DISCOUNTING LOGIC
+===========================================================
+
+IFRS 17 requires fulfilment cashflows to reflect time value of money.
+
+Present value formula:
+
+PV(CF_t)
+=
+CF_t / (1+r)^t
+
+Where:
+
+CF_t = future cashflow
+r    = discount rate
+
+Total discounted value:
+
+PV_Total
+=
+Σ PV(CF_t)
+
+The engine may use:
+
+> Locked-in discount rates
+> Current discount rates
+> Yield curves
+> Scenario-based curves
+
+
+===========================================================
+12) BEST ESTIMATE LIABILITY (BEL)
+===========================================================
+
+BEL represents discounted expected future fulfilment cashflows.
+
+Simplified structure:
+
+BEL
+=
+PV(Claims + Expenses - Premiums)
+
+Equivalent form:
+
+BEL
+=
+- PV(Net_CF)
+
+BEL is recalculated at every projection period.
+
+
+===========================================================
+13) RISK ADJUSTMENT (RA)
+===========================================================
+
+IFRS 17 requires compensation for non-financial risk uncertainty.
+
+Simplified implementation:
+
+RA
+=
+CoC_Ratio
+×
+BEL
+
+Where:
+
+CoC_Ratio
+=
+Cost of Capital style risk parameter
+
+Real-world approaches may include:
+
+> Confidence Level
+> Tail Value at Risk
+> Stochastic simulation
+> Full Cost of Capital frameworks
+
+
+===========================================================
+14) CONTRACTUAL SERVICE MARGIN (CSM)
+===========================================================
+
+CSM represents unearned future profit.
+
+Initial CSM:
+
+CSM_Initial
+=
+- (BEL + RA)
+
+if:
+
+(BEL + RA) < 0
+
+If contracts are loss-making:
+
+CSM = 0
+
+and a Loss Component may arise.
+
+Under IFRS 17,
+future profits cannot be recognized immediately.
+
+
+===========================================================
+15) LOSS COMPONENT
+===========================================================
+
+If fulfilment cashflows are unfavorable:
+
+BEL + RA > 0
+
+then:
+
+Loss_Component
+=
+BEL + RA
+
+This amount is recognized immediately in profit or loss.
+
+
+===========================================================
+16) COVERAGE UNITS
+===========================================================
+
+Coverage units determine how CSM is released.
+
+Simplified structure:
+
+Coverage_Unit(t)
+=
+Sum_Assured
+×
+Active(t)
+
+Remaining future coverage:
+
+Remaining_Coverage(t)
+=
+Σ future coverage units
+
+CSM release:
+
+CSM_Release(t)
+=
+Opening_CSM
+×
+Coverage_Unit(t)
+/
+Remaining_Coverage(t)
+
+This creates proportional profit emergence.
+
+
+===========================================================
+17) CSM ROLLFORWARD
+===========================================================
+
+CSM evolves through time.
+
+Simplified structure:
+
+Closing_CSM(t)
+=
+Opening_CSM(t)
++
+Interest_Accretion(t)
+-
+CSM_Release(t)
+
+Interest accretion:
+
+Interest_Accretion(t)
+=
+Opening_CSM(t)
+×
+locked_in_rate
+
+IFRS 17 requires locked-in rates for CSM accretion.
+
+
+===========================================================
+18) LIABILITY FOR REMAINING COVERAGE (LRC)
+===========================================================
+
+Simplified structure:
+
+LRC
+=
+BEL
++
+RA
++
+CSM
+
+LRC decreases as insurance service is provided.
+
+
+===========================================================
+19) LIABILITY FOR INCURRED CLAIMS (LIC)
+===========================================================
+
+LIC represents liabilities arising from incurred insured events.
+
+Examples:
+
+> Reported claims
+> IBNR claims
+> Claims settlement expenses
+
+This project does not model LIC separately in full detail.
+
+
+===========================================================
+20) OCI LOGIC
+===========================================================
+
+OCI separates financial market volatility from insurance service result.
+
+Simplified structure:
+
+OCI
+=
+Current_Rate_Valuation
+-
+Locked_In_Rate_Valuation
+
+Purpose:
+
+Reducing accounting volatility caused by changing interest rates.
+
+
+===========================================================
+21) GROUPING LOGIC
+===========================================================
+
+IFRS 17 requires grouping of contracts.
+
+Typical grouping dimensions:
+
+> Portfolio
+> Profitability
+> Issue year
+> Risk characteristics
+
+Common groups:
+
+> Onerous contracts
+> Profitable contracts
+> Contracts with low risk of becoming onerous
+
+
+===========================================================
+22) PROJECTION PIPELINE
+===========================================================
+
+Main pipeline structure:
+
+config
+→ assumptions
+→ discount curves
+→ policy generation
+→ mortality and lapse
+→ premium calculations
+→ claim calculations
+→ expense calculations
+→ net cashflows
+→ discounting
+→ BEL
+→ RA
+→ CSM
+→ grouping
+→ OCI
+→ outputs
+
+
+===========================================================
+23) MORTALITY TABLE STRUCTURE
+===========================================================
+
+The engine supports two mortality structures:
+
+1)
+mortality_table.csv
+
+2)
+Fallback qx() function
+
+If mortality tables exist,
+the engine reads external mortality assumptions.
+
+Otherwise,
+mortality is generated dynamically through qx().
+
+
+===========================================================
+24) MATRIX CALCULATION LOGIC
+===========================================================
+
+Large-scale actuarial calculations require efficient computation structures.
+
+The engine therefore uses:
+
+> Pandas vectorization
+> NumPy calculations
+> Matrix transformations
+
+Advantages:
+
+> Faster runtime
+> Better scalability
+> Cleaner calculations
+> Easier rollforward structures
+
+
+===========================================================
+25) VALIDATION & CONTROL MECHANISM
+===========================================================
+
+The engine contains validation structures to detect logical inconsistencies.
+
+Examples:
+
+> Negative probabilities
+> Survival above 1
+> Invalid discount factors
+> Missing projection years
+> Invalid cashflow balances
+> Missing configuration values
+
+In actuarial modeling:
+
+A model running successfully
+does not necessarily mean
+the model is mathematically correct.
+
+
+===========================================================
+26) EDUCATIONAL PURPOSE
+===========================================================
+
+This project was designed primarily for:
+
+> Learning IFRS 17
+> Understanding actuarial projections
+> Practicing insurance mathematics
+> Exploring liability rollforwards
+> Learning scalable financial modeling
+> Understanding insurance accounting structures
+
+The formulas shown here are simplified educational representations of real-world actuarial systems.
+
+
+===========================================================
+27) FINAL NOTE
+===========================================================
+
+This project was rewritten repeatedly during the learning process.
+
+The structure reflects an attempt to combine:
+
+> Actuarial mathematics
+> Insurance projection

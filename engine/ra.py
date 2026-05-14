@@ -72,6 +72,15 @@ def calculate_risk_adjustment(
     # Bu, confidence_level'in 0.5 ile 1 arasında olup olmadığını kontrol eder. Eğer değilse, bir ValueError hatası gönderir.
 
     # RA hesaplaması için gerekli kolonların varlığını kontrol et ve sadece gerekli olanları array olarak al
+    # adjusted_surrender_benefit BEL modülünde türetiliyor olabilir; yoksa eldeki kolondan üret.
+    if "adjusted_surrender_benefit" not in projection.columns:
+        if "Surrender_Benefit" in projection.columns:
+            projection = projection.copy()
+            projection["adjusted_surrender_benefit"] = projection["Surrender_Benefit"].astype(np.float32)
+        else:
+            projection = projection.copy()
+            projection["adjusted_surrender_benefit"] = np.float32(0.0)
+
     required_cols = [
         "policy_id",
         "qx",
@@ -105,6 +114,9 @@ def calculate_risk_adjustment(
     n_scenarios = int(config.n_risk_scenarios) # Risk senaryolarının sayısı, model yapılandırmasından alınır.
     #Bu, risk hesaplaması için kaç farklı senaryo oluşturulacağını belirler.
 
+    # Deterministic RNG (avoid dependence on global np.random state)
+    base_seed = int(getattr(config, "random_seed", 0) or 0) % (2**32)
+
     # policy_id satır bazlı geldiği için poliçe bazına indirgemek gerekir
     unique_policies, policy_index = np.unique(policy_id, return_inverse=True)
     n_policies = unique_policies.size
@@ -114,7 +126,8 @@ def calculate_risk_adjustment(
     tmp_policy_pv = np.zeros(n_policies, dtype=np.float32)
 
     for s in range(n_scenarios):
-        stochastic_qx = np.random.binomial(n=1, p=qx, size=n_rows).astype(np.float32)
+        rng = np.random.default_rng((base_seed + s) % (2**32))
+        stochastic_qx = rng.binomial(n=1, p=qx, size=n_rows).astype(np.float32)
         #Bu, her poliçe için ölüm olayının gerçekleşip gerçekleşmediğini belirlemek için
         # qx değerlerine göre binom dağılımından rastgele sayılar üretir. 
         # 1, ölüm olayının gerçekleştiğini, 0 ise gerçekleşmediğini gösterir.

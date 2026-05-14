@@ -12,6 +12,8 @@ import gc #Bu, senaryo çalıştırmaları sırasında bellek yönetimi ve optim
 
 import pandas as pd #Bu, veri manipülasyonu ve analiz için kullanılır. Bizim veri çerçevesi oluşturmamızısağlar.
 
+import logging
+
 from model.config_model import ModelConfig 
 #Bu, modelin yapılandırma parametrelerini içeren sınıfı içe aktarır.
 
@@ -35,6 +37,9 @@ from engine.bel import calculate_bel
 
 from engine.ra import calculate_risk_adjustment
 #Bu, senaryoların çalıştırılması sırasında kullanılacak Risk Adjustment (RA) hesaplamak için kullanılan fonksiyonu içe aktar
+
+
+logger = logging.getLogger(__name__)
 
 
 SCENARIOS = {
@@ -122,7 +127,7 @@ def run_single_scenario(
 
 
         if "coverage_years" not in projection.columns:
-            projection["coverage_years"] = projection["Year"]
+            projection["coverage_years"] = int(getattr(config, "coverage_years", getattr(config, "projection_years", 1)) or 1)
         #Bu, projeksiyon tablosunda "coverage_years" sütunu yoksa, "Year" sütununu kopyalayarak "coverage_years" sütununu oluşturur.
 
         projection = calculate_cashflows(projection, config)
@@ -166,7 +171,7 @@ def run_single_scenario(
         }
 
     except Exception as e:
-        print(f"Error processing scenario {index}: {e}")
+        logger.warning(f"Error processing scenario {index}: {e}", exc_info=True)
         return None
     #Burada, senaryo çalıştırılırken herhangi bir hata oluşursa, hata mesajı yazdırılır ve None döndürülür.
     #None döndürülmesi, bu senaryonun sonuçlarının geçersiz olduğunu ve sonraki işlemlerde dikkate alınmaması gerektiğini belirtir.

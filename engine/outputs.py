@@ -1,6 +1,9 @@
 from pathlib import Path
-from venv import logger
+import logging
+from typing import Optional
 import pandas as pd
+
+logger = logging.getLogger(__name__)
 
 EXCEL_MAX_ROWS = 1_048_576 # Excel'in tek bir sayfada desteklediği maksimum satır sayısı
 
@@ -32,13 +35,24 @@ def _write_excel_safe(writer: pd.ExcelWriter, df: pd.DataFrame, sheet: str, prev
 # Ana fonksiyon: tüm çıktıları kaydet
 def save_outputs(
     projection: pd.DataFrame,
-    bel_result: pd.DataFrame,
-    ra_result: pd.DataFrame,
-    csm_result: pd.DataFrame,
-    scenario_results: pd.DataFrame,
+    bel_result: Optional[pd.DataFrame],
+    ra_result: Optional[pd.DataFrame],
+    csm_result: Optional[pd.DataFrame],
+    scenario_results: Optional[pd.DataFrame],
     output_dir: str,
     master: pd.DataFrame,
-):
+) -> None:
+    """Persist engine outputs to CSV and (optionally) Excel.
+
+    Notes:
+    - CSVs are written as UTF-8 with BOM for Excel compatibility.
+    - Excel export uses `openpyxl` and applies a row-limit guard.
+    """
+    if projection is None:
+        raise ValueError("projection is required")
+    if master is None:
+        raise ValueError("master is required")
+
     # 1. Çıktı klasörünü oluştur
     output_path = Path(output_dir)
     output_path.mkdir(parents=True, exist_ok=True)
@@ -104,13 +118,16 @@ def save_outputs(
     excel_file = output_path / "ifrs17_term_life_projection.xlsx"
 
     # Excel'e kaydet: openpyxl motorunu kullanarak tüm DataFrame'leri tek bir dosyada farklı sayfalara yaz
-    with pd.ExcelWriter(excel_file, engine="openpyxl") as writer:
-        _write_excel_safe(writer, master, "master")
-        _write_excel_safe(writer, projection, "projection")
-        _write_excel_safe(writer, bel_result, "bel")
-        _write_excel_safe(writer, ra_result, "ra")
-        _write_excel_safe(writer, csm_result, "csm")
-        if scenario_results is not None:
-            _write_excel_safe(writer, scenario_results, "scenarios")
-
-    logger.info(f"Excel outputs saved: {excel_file}")
+    try:
+        with pd.ExcelWriter(excel_file, engine="openpyxl") as writer:
+            _write_excel_safe(writer, master, "master")
+            _write_excel_safe(writer, projection, "projection")
+            _write_excel_safe(writer, bel_result, "bel")
+            _write_excel_safe(writer, ra_result, "ra")
+            _write_excel_safe(writer, csm_result, "csm")
+            if scenario_results is not None:
+                _write_excel_safe(writer, scenario_results, "scenarios")
+        logger.info(f"Excel outputs saved: {excel_file}")
+    except ModuleNotFoundError as e:
+        # openpyxl missing or not importable
+        logger.warning(f"Excel export skipped (missing dependency): {e}")

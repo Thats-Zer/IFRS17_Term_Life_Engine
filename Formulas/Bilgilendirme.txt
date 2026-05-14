@@ -1,4 +1,651 @@
-bu projeyi defalarca kez yazdım,
-defalarca kez baştan sona kadar neyi 
-daha iyi yapabilirim diye saatlerce kafa yordum.
-bir sorun olması durumunda lütfen iletişime geçiniz.
+IFRS17 TERM LIFE ENGINE
+FORMÜL VE MANTIK DOKÜMANI
+
+
+Başlangıç Notu
+
+Bu proje; aktüeryal modelleme, finansal matematik ve IFRS 17 ölçüm mantığını öğrenme sürecinde birçok kez yeniden yazılmıştır.
+
+Bu dokümanın amacı, engine yapısının arkasındaki matematiksel ve kavramsal mantığı açıklamaktır.
+
+Burada gösterilen formüller ve yapılar, eğitim amacıyla bilinçli şekilde sadeleştirilmiştir.
+
+Projede hâlâ hatalar veya eksik yorumlar bulunabilir.
+Eğer bir tutarsızlık fark ederseniz lütfen bildiriniz.
+
+
+===========================================================
+1) GENEL MODEL YAPISI
+===========================================================
+
+Tanımlar:
+
+t  = projeksiyon yılı
+i  = poliçe indeksi
+n  = poliçe sayısı
+T  = toplam projeksiyon süresi
+
+Engine her sigorta poliçesini zaman boyunca ayrı ayrı projekte eder.
+
+Matematiksel olarak:
+
+Projection(i,t)
+
+Bu yapı şu anlama gelir:
+
+Her poliçe i
+ve her projeksiyon yılı t için,
+
+engine gerekli tüm sigorta nakit akışlarını ve yükümlülük hareketlerini hesaplar.
+
+Örneğin:
+
+n = 10.000 poliçe
+T = 20 yıl
+
+ise:
+
+Toplam projeksiyon satırı
+=
+n × T
+=
+200.000 satır
+
+Bu kadar büyük hesaplama hacmi nedeniyle,
+geleneksel döngüler yerine vektörize ve matris tabanlı hesaplama tercih edilir.
+
+
+===========================================================
+2) TEMEL SİGORTA PROJEKSİYON MANTIĞI
+===========================================================
+
+Her poliçe-yıl kombinasyonu için engine aşağıdakileri hesaplar:
+
+> Yaşam Olasılığı
+> Ölüm Olasılığı
+> Lapse Olasılığı
+> Aktif Poliçe Durumu
+> Prim Nakit Akışları
+> Hasar Nakit Akışları
+> Gider Nakit Akışları
+> Net Nakit Akışları
+> İskontolanmış Nakit Akışları
+> BEL
+> Risk Adjustment
+> CSM
+> OCI hareketleri
+
+Bu hesaplamalar birlikte IFRS 17 yükümlülük yapısını oluşturur.
+
+
+===========================================================
+3) YAŞAM OLASILIĞI
+===========================================================
+
+Tanım:
+
+q_x = x yaşındaki kişinin ölüm olasılığı
+
+Buna göre:
+
+p_x = 1 - q_x
+
+Burada:
+
+p_x = yıllık yaşama olasılığıdır.
+
+Başlangıçta:
+
+Survival(0) = 1
+
+çünkü tüm poliçeler başlangıçta aktif kabul edilir.
+
+İleri yıllar için:
+
+Survival(t)
+=
+Survival(t-1)
+×
+(1 - q_{x+t-1})
+
+Bu yapı zaman boyunca kümülatif yaşama olasılığı üretir.
+
+
+===========================================================
+4) ÖLÜM OLASILIĞI
+===========================================================
+
+Ölüm olasılığı, ölümün ilgili yıl içinde gerçekleşme olasılığıdır.
+
+Formül:
+
+Death_Probability(t)
+=
+Survival(t-1)
+×
+q_{x+t-1}
+
+Bu düzeltme gereklidir çünkü ölüm yalnızca sigortalı ilgili yılın başına kadar hayatta kaldıysa gerçekleşebilir.
+
+
+===========================================================
+5) LAPSE OLASILIĞI
+===========================================================
+
+Lapse olasılığı, sigortalının sözleşmeyi gönüllü şekilde sonlandırma olasılığıdır.
+
+Basitleştirilmiş yapı:
+
+Lapse_Probability(t)
+=
+Persistency(t-1)
+×
+lapse_rate
+
+Persistency gelişimi:
+
+Persistency(t)
+=
+Persistency(t-1)
+×
+(1 - lapse_rate)
+
+Başlangıçta:
+
+Persistency(0) = 1
+
+
+===========================================================
+6) AKTİF POLİÇE DURUMU
+===========================================================
+
+Bir poliçenin aktif kalabilmesi için:
+
+> Sigortalının hayatta olması
+ve
+> Poliçenin lapse olmaması gerekir.
+
+Dolayısıyla:
+
+Active(t)
+=
+Survival(t)
+×
+Persistency(t)
+
+Bu değişken çok önemlidir çünkü primler, giderler ve coverage unit hesapları aktif poliçeye bağlıdır.
+
+
+===========================================================
+7) PRİM NAKİT AKIŞLARI
+===========================================================
+
+Beklenen prim girişleri:
+
+Premium_CF(t)
+=
+Premium
+×
+Active(t)
+
+Eğer prim ödeme süresi sona ermişse:
+
+Premium_CF(t) = 0
+
+şu koşulda:
+
+t > premium_payment_term
+
+
+===========================================================
+8) HASAR NAKİT AKIŞLARI
+===========================================================
+
+Beklenen hasar çıkışları:
+
+Claim_CF(t)
+=
+Sum_Assured
+×
+Death_Probability(t)
+
+Genel sigortacılık mantığı:
+
+Beklenen Hasar
+=
+Teminat Tutarı
+×
+Olay Olasılığı
+
+Bu yapı aktüeryal değerleme modellerinin temelidir.
+
+
+===========================================================
+9) GİDER NAKİT AKIŞLARI
+===========================================================
+
+Giderler ikiye ayrılır:
+
+> İlk Edinim Giderleri
+> Devam Eden Bakım Giderleri
+
+İlk edinim gideri:
+
+Acquisition_CF(0)
+=
+Acquisition_Cost
+
+Bakım giderleri:
+
+Expense_CF(t)
+=
+Maintenance_Expense
+×
+Active(t)
+
+Örnek giderler:
+
+> Komisyon ödemeleri
+> Operasyonel giderler
+> Yönetim giderleri
+> Hasar yönetim giderleri
+> IT altyapı giderleri
+
+
+===========================================================
+10) NET NAKİT AKIŞI YAPISI
+===========================================================
+
+Net beklenen nakit akışı:
+
+Net_CF(t)
+=
+Premium_CF(t)
+-
+Claim_CF(t)
+-
+Expense_CF(t)
+
+Pozitif değerler beklenen kârlılığı gösterir.
+
+Negatif değerler ise beklenen zarar veya yüksek yükümlülük çıkışı anlamına gelir.
+
+
+===========================================================
+11) İSKONTO MANTIĞI
+===========================================================
+
+IFRS 17 gelecekteki nakit akışlarının zaman değerine göre iskonto edilmesini zorunlu kılar.
+
+Bugünkü değer formülü:
+
+PV(CF_t)
+=
+CF_t / (1+r)^t
+
+Burada:
+
+CF_t = gelecekteki nakit akışı
+r    = iskonto oranı
+
+Toplam iskonto edilmiş değer:
+
+PV_Total
+=
+Σ PV(CF_t)
+
+Engine şu yapıları destekleyebilir:
+
+> Locked-in discount rate
+> Current discount rate
+> Yield curve
+> Senaryo bazlı faiz yapıları
+
+
+===========================================================
+12) BEST ESTIMATE LIABILITY (BEL)
+===========================================================
+
+BEL, beklenen gelecekteki fulfilment cashflow’ların iskonto edilmiş değeridir.
+
+Basitleştirilmiş yapı:
+
+BEL
+=
+PV(Claims + Expenses - Premiums)
+
+Eşdeğer form:
+
+BEL
+=
+- PV(Net_CF)
+
+BEL her projeksiyon döneminde yeniden hesaplanır.
+
+
+===========================================================
+13) RISK ADJUSTMENT (RA)
+===========================================================
+
+IFRS 17 finansal olmayan risk belirsizliği için ek marj gerektirir.
+
+Basitleştirilmiş yapı:
+
+RA
+=
+CoC_Ratio
+×
+BEL
+
+Burada:
+
+CoC_Ratio
+=
+Cost of Capital benzeri risk parametresi
+
+Gerçek dünyada kullanılan yöntemler:
+
+> Confidence Level
+> Tail Value at Risk
+> Stochastic simulation
+> Cost of Capital frameworkleri
+
+
+===========================================================
+14) CONTRACTUAL SERVICE MARGIN (CSM)
+===========================================================
+
+CSM kazanılmamış gelecekteki kârı temsil eder.
+
+Başlangıç CSM’i:
+
+CSM_Initial
+=
+- (BEL + RA)
+
+şu durumda:
+
+(BEL + RA) < 0
+
+Eğer sözleşme zarar ediyorsa:
+
+CSM = 0
+
+ve Loss Component oluşabilir.
+
+IFRS 17’ye göre gelecekteki kâr hemen muhasebeleştirilemez.
+
+
+===========================================================
+15) LOSS COMPONENT
+===========================================================
+
+Eğer fulfilment cashflow’lar olumsuzsa:
+
+BEL + RA > 0
+
+ise:
+
+Loss_Component
+=
+BEL + RA
+
+Bu tutar doğrudan kâr/zarara yazılır.
+
+
+===========================================================
+16) COVERAGE UNITS
+===========================================================
+
+Coverage unit yapısı CSM’in zamana yayılmasını belirler.
+
+Basitleştirilmiş yapı:
+
+Coverage_Unit(t)
+=
+Sum_Assured
+×
+Active(t)
+
+Kalan toplam coverage:
+
+Remaining_Coverage(t)
+=
+Σ gelecekteki coverage unitler
+
+CSM release:
+
+CSM_Release(t)
+=
+Opening_CSM
+×
+Coverage_Unit(t)
+/
+Remaining_Coverage(t)
+
+Bu yapı hizmet bazlı kâr dağılımı sağlar.
+
+
+===========================================================
+17) CSM ROLLFORWARD
+===========================================================
+
+CSM zaman boyunca hareket eder.
+
+Basitleştirilmiş yapı:
+
+Closing_CSM(t)
+=
+Opening_CSM(t)
++
+Interest_Accretion(t)
+-
+CSM_Release(t)
+
+Faiz eklenmesi:
+
+Interest_Accretion(t)
+=
+Opening_CSM(t)
+×
+locked_in_rate
+
+IFRS 17 CSM için locked-in rate kullanımını zorunlu tutar.
+
+
+===========================================================
+18) LIABILITY FOR REMAINING COVERAGE (LRC)
+===========================================================
+
+Basitleştirilmiş yapı:
+
+LRC
+=
+BEL
++
+RA
++
+CSM
+
+LRC sigorta hizmeti verildikçe azalır.
+
+
+===========================================================
+19) LIABILITY FOR INCURRED CLAIMS (LIC)
+===========================================================
+
+LIC gerçekleşmiş sigortalı olaylara ilişkin yükümlülükleri temsil eder.
+
+Örnekler:
+
+> Raporlanmış hasarlar
+> IBNR hasarlar
+> Hasar ödeme giderleri
+
+Bu projede LIC detaylı ayrı modellenmemiştir.
+
+
+===========================================================
+20) OCI MANTIĞI
+===========================================================
+
+OCI finansal piyasa dalgalanmalarını sigorta hizmet sonucundan ayırır.
+
+Basitleştirilmiş yapı:
+
+OCI
+=
+Current_Rate_Valuation
+-
+Locked_In_Rate_Valuation
+
+Amaç:
+
+Faiz oranı değişimlerinden kaynaklanan muhasebe volatilitesini azaltmak.
+
+
+===========================================================
+21) GROUPING MANTIĞI
+===========================================================
+
+IFRS 17 sözleşmelerin gruplandırılmasını zorunlu tutar.
+
+Gruplama kriterleri:
+
+> Portföy
+> Karlılık
+> İhraç yılı
+> Risk karakteristiği
+
+Tipik gruplar:
+
+> Onerous contracts
+> Profitable contracts
+> Low-risk contracts
+
+
+===========================================================
+22) PROJECTION PIPELINE
+===========================================================
+
+Ana pipeline yapısı:
+
+config
+→ assumptions
+→ discount curves
+→ policy generation
+→ mortality and lapse
+→ premium calculations
+→ claim calculations
+→ expense calculations
+→ net cashflows
+→ discounting
+→ BEL
+→ RA
+→ CSM
+→ grouping
+→ OCI
+→ outputs
+
+
+===========================================================
+23) MORTALITY TABLE YAPISI
+===========================================================
+
+Engine iki farklı mortality yapısını destekler:
+
+1)
+mortality_table.csv
+
+2)
+Fallback qx() function
+
+Eğer mortality table mevcutsa,
+engine dış veri kullanır.
+
+Aksi halde mortality dinamik qx() fonksiyonu ile üretilir.
+
+
+===========================================================
+24) MATRİS HESAPLAMA MANTIĞI
+===========================================================
+
+Büyük ölçekli aktüeryal hesaplamalar verimli hesaplama yapısı gerektirir.
+
+Bu nedenle engine:
+
+> Pandas vectorization
+> NumPy calculations
+> Matrix transformations
+
+kullanır.
+
+Avantajları:
+
+> Daha hızlı çalışma
+> Ölçeklenebilirlik
+> Daha temiz hesaplama yapısı
+> Daha kolay rollforward analizi
+
+
+===========================================================
+25) VALIDATION VE KONTROL MEKANİZMASI
+===========================================================
+
+Engine mantıksal hataları yakalamak için kontrol mekanizmaları içerir.
+
+Örnekler:
+
+> Negatif olasılıklar
+> 1’den büyük survival oranı
+> Geçersiz discount factor
+> Eksik projeksiyon yılı
+> Hatalı cashflow dengesi
+> Eksik config değerleri
+
+Aktüeryal modellemede:
+
+Bir modelin çalışması,
+matematiksel olarak doğru olduğu anlamına gelmez.
+
+
+===========================================================
+26) EĞİTİMSEL AMAÇ
+===========================================================
+
+Bu proje temel olarak:
+
+> IFRS 17 öğrenmek
+> Aktüeryal projeksiyon mantığını anlamak
+> Sigorta matematiği pratiği yapmak
+> Liability rollforward mantığını öğrenmek
+> Ölçeklenebilir finansal modelleme yapmak
+> Sigorta muhasebesi yapısını anlamak
+
+amaçlarıyla geliştirilmiştir.
+
+Buradaki formüller gerçek dünyadaki aktüeryal sistemlerin sadeleştirilmiş eğitimsel versiyonlarıdır.
+
+
+===========================================================
+27) SON NOT
+===========================================================
+
+Bu proje öğrenme süreci boyunca birçok kez yeniden yazılmıştır.
+
+Yapı şu alanları birleştirmeyi amaçlamaktadır:
+
+> Aktüeryal matematik
+> Sigorta projeksiyon mantığı
+> Finansal raporlama mekanikleri
+> IFRS 17 ölçüm prensipleri
+> Ölçeklenebilir vektörize hesaplamalar
+
+Projede hâlâ hata,
+aşırı sadeleştirme
+veya eksik yorumlar bulunabilir.
+
+Eğer hata veya tutarsızlık fark ederseniz,
+lütfen bildiriniz.
+
+Çünkü aktüeryal modelleme sürekli inceleme ve iterasyon ile gelişir.

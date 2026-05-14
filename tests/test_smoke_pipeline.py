@@ -67,9 +67,9 @@ def test_cashflows_bel_ra_smoke(config_small, mortality_table):
     master = create_master_data(config_small)
     proj = create_projection_table(master, config_small, mortality_table).copy()
 
-    # cashflows bazı sürümlerde coverage_years ister
-    if "coverage_years" not in proj.columns and "Year" in proj.columns:
-        proj["coverage_years"] = proj["Year"]
+    # cashflows coverage_years ister; Year'a eşitlemek yanlış (poliçe-sabit olmalı)
+    if "coverage_years" not in proj.columns:
+        proj["coverage_years"] = int(getattr(config_small, "coverage_years", getattr(config_small, "projection_years", 1)) or 1)
 
     # discount_factor gerekli olabilir; yoksa curve merge et
     if "discount_factor" not in proj.columns and "Year" in proj.columns:
@@ -97,3 +97,39 @@ def test_cashflows_bel_ra_smoke(config_small, mortality_table):
     ra = calculate_risk_adjustment(proj, config_small)
     assert isinstance(ra, pd.DataFrame)
     assert ("RA" in ra.columns) or ("ra_per_policy" in ra.columns), f"RA sonucu yok. Kolonlar: {ra.columns.tolist()}"
+
+
+def test_cashflows_bel_ra_smoke_float64_mode(config_small, mortality_table):
+    # Optional precision mode: should not crash and should return the same schema.
+    if hasattr(config_small, "model_copy"):
+        cfg = config_small.model_copy(update={"use_float64": True})
+    elif hasattr(config_small, "copy"):
+        cfg = config_small.copy(update={"use_float64": True})
+    else:
+        cfg = config_small
+        setattr(cfg, "use_float64", True)
+
+    master = create_master_data(cfg)
+    proj = create_projection_table(master, cfg, mortality_table).copy()
+
+    if "coverage_years" not in proj.columns:
+        proj["coverage_years"] = int(getattr(cfg, "coverage_years", getattr(cfg, "projection_years", 1)) or 1)
+
+    if "discount_factor" not in proj.columns and "Year" in proj.columns:
+        curve = create_discount_curve(cfg).copy()
+        curve["Year"] = curve["Year"].astype(int)
+        proj["Year"] = proj["Year"].astype(int)
+        if "discount_factor_opening" not in curve.columns:
+            curve["discount_factor_opening"] = curve["discount_factor"]
+        curve = curve[["Year", "discount_factor", "discount_factor_opening"]].drop_duplicates("Year")
+        proj = proj.merge(curve, on="Year", how="left", validate="m:1")
+
+    proj = calculate_cashflows(proj, cfg)
+
+    bel = calculate_bel(proj, cfg)
+    assert isinstance(bel, pd.DataFrame)
+    assert ("BEL" in bel.columns) or ("bel_per_policy" in bel.columns)
+
+    ra = calculate_risk_adjustment(proj, cfg)
+    assert isinstance(ra, pd.DataFrame)
+    assert ("RA" in ra.columns) or ("ra_per_policy" in ra.columns)

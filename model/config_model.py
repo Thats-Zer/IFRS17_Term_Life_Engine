@@ -1,4 +1,4 @@
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, Field, field_validator, model_validator
 #integer veri tipi sadece tam sayıları temsil ederken, float veri tipi ondalık sayıları temsil eder.
 #boolean veri tipi True veya False değerlerini temsil ederken, string veri tipi metin verilerini temsil eder.
 #ge=0 ifadesi, ilgili alanın değerinin 0 veya daha büyük olması gerektiğini belirtir.
@@ -13,6 +13,12 @@ class ConfigModel(BaseModel):
     
     projection_years: int= Field (default=10, gt=0, description="Number of years to project")
     #projeksiyon yılını belirtir. Bu, modelin ne kadar uzun bir süre için projeksiyon yapacağını belirler.
+
+    coverage_years: int = Field(
+        default=10,
+        gt=0,
+        description="Policy coverage/term length in years (must be <= projection_years)",
+    )
     
     random_seed: int=42
     #rastgele sayı üreteci için kullanılan başlangıç değerini belirtir. Bu, modelin her çalıştırıldığında aynı sonuçları üretmesini sağlar.
@@ -27,7 +33,7 @@ class ConfigModel(BaseModel):
     max_issue_age: int = Field (default=55, ge=0, description="Maximum issue age for the policies")
     #policelerin maksimum başlangıç yaşını belirtir. Bu, modelin oluşturduğu poliçelerin hangi yaş aralığında olduğunu belirler.
 
-    discount_rate: float = Field (default=0.05, gt=0, description="Discount rate for the policies")
+    discount_rate: float = Field (default=0.05, ge=0, description="Discount rate for the policies")
     #iskonto oranını belirtir. Bu, modelin gelecekteki nakit akışlarını bugünkü değerlerine dönüştürmesinde kullanılan orandır.
 
     tax_rate: float = Field (default=0.20, ge=0, le=1, description="Tax rate for the policies")
@@ -36,7 +42,7 @@ class ConfigModel(BaseModel):
     premium_margin: float = Field (default=1.2, gt=0, description="Premium margin for the policies")
     #prim marjını belirtir. Bu, modelin hesapladığı primlerin üzerine eklenen marjı ifade eder.
 
-    inflation_rate: float = Field (default=0.05, gt=0, description="Inflation rate for the policies")
+    inflation_rate: float = Field (default=0.05, ge=0, description="Inflation rate for the policies")
     #enflasyon oranını belirtir. Bu, modelin gelecekteki nakit akışlarını enflasyona göre ayarlamasında kullanılan orandır.
 
     unit_cost: float = Field (default=1000.0, gt=0, description="Unit cost for the policies")   
@@ -48,16 +54,16 @@ class ConfigModel(BaseModel):
     mortality_age_factor: float = Field (default=0.0001, gt=0, description="Mortality age factor for the policies")
     #policelerin yaş faktörünü belirtir. Bu, modelin ölüm riskini yaşa göre ayarlamasında kullanılan orandır.
 
-    mortality_shock: float = Field (default=0.0005, gt=0, description="Mortality shock for the policies")
+    mortality_shock: float = Field (default=0.0005, ge=0, description="Mortality shock for the policies")
     #policeler için geçerli olan ölüm şokunu belirtir. Bu, modelin beklenmedik ölüm risklerini hesaba katmasında kullanılan orandır.
 
-    lapse_decay: float = Field (default=0.15, gt=0, description="Lapse decay for the policies")
+    lapse_decay: float = Field (default=0.15, ge=0, description="Lapse decay for the policies")
     #policelerin lapse decay oranını belirtir. Bu, modelin lapse riskini zamanla azalan bir şekilde hesaplamasında kullanılan orandır.
 
-    lapse_base_rate: float = Field (default=0.10, gt=0, description="Lapse base rate for the policies")
+    lapse_base_rate: float = Field (default=0.10, ge=0, description="Lapse base rate for the policies")
     #policeler için geçerli olan temel lapse oranını belirtir. Bu, modelin lapse riskini hesaplamasında kullanılan orandır.
 
-    coc_ratio: float = Field (default=0.05, gt=0, description="Cost of capital ratio for the policies")
+    coc_ratio: float = Field (default=0.05, ge=0, description="Cost of capital ratio for the policies")
     #policeler için geçerli olan sermaye maliyeti oranını belirtir. Bu, modelin sermaye maliyetini hesaplamasında kullanılan orandır.
 
     s2_margin: float = Field (default=0.25, gt=0, description="S2 margin for the policies")
@@ -94,6 +100,50 @@ class ConfigModel(BaseModel):
         default=True,
         description="Flag to indicate whether scenario analysis should be executed",
         # Bu, modelin senaryo analizinin yürütülmesi gerekip gerekmediğini belirten bir bayraktır.
+    )
+
+
+    # ==================================================
+    # SCENARIO / SHOCK PARAMETERS (optional)
+    # ==================================================
+
+    discount_rate_shift: float = Field(
+        default=0.0,
+        description="Scenario shock: additive shift to discount_rate (e.g. -0.01 for -100bps)",
+    )
+
+    mortality_shock_multiplier: float = Field(
+        default=1.0,
+        gt=0,
+        description="Scenario shock: multiplier applied to mortality qx (e.g. 1.10 for +10%)",
+    )
+
+    lapse_initial_rate_multiplier: float = Field(
+        default=1.0,
+        gt=0,
+        description="Scenario shock: multiplier applied to lapse_base_rate",
+    )
+
+    unit_expense_multiplier: float = Field(
+        default=1.0,
+        gt=0,
+        description="Scenario shock: multiplier applied to expense assumptions",
+    )
+
+    scenario_max_workers: int = Field(
+        default=1,
+        gt=0,
+        description="Max parallel workers for scenario runs",
+    )
+
+
+    # ==================================================
+    # NUMERICS (optional)
+    # ==================================================
+
+    use_float64: bool = Field(
+        default=False,
+        description="If True, use float64 for selected PV/aggregation calculations to reduce rounding error",
     )
 
 
@@ -140,6 +190,29 @@ class ConfigModel(BaseModel):
         if min_age is not None and max_issue_age < min_age:
             raise ValueError("max_issue_age must be >= min_issue_age")
         return max_issue_age
+
+
+    @field_validator("coverage_years")
+    def validate_coverage_years(coverage_years, info):
+        projection_years = info.data.get("projection_years")
+        if projection_years is not None and coverage_years > projection_years:
+            raise ValueError("coverage_years must be <= projection_years")
+        return coverage_years
+
+
+    @model_validator(mode="after")
+    def _backward_compat_reinsurance_rate(self):
+        # Backward compatibility:
+        # Some configs use `reinsurance_cost` while the engine consumes `reinsurance_cost_rate`.
+        # If rate was not explicitly set, mirror it from cost.
+        try:
+            fields_set = self.model_fields_set
+        except Exception:
+            fields_set = set()
+
+        if "reinsurance_cost_rate" not in fields_set and "reinsurance_cost" in fields_set:
+            self.reinsurance_cost_rate = self.reinsurance_cost
+        return self
 
 
 model_config = ConfigModel

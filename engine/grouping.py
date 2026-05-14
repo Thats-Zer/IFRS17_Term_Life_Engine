@@ -54,9 +54,11 @@ def detect_onerous_groups(
     # is_onerous_initial sütunu oluşturulurken get() metodu kullanarak varsayılan değer ataması yapalım. Böylece, eğer csm_result DataFrame'inde is_onerous sütunu yoksa, is_onerous_initial sütunu False olarak atanır.
     csm_result["is_onerous_initial"] = csm_result.get("is_onerous", False)
     
-    # is_onerous_subsequently sütunu oluşturulurken get() metodu kullanarak varsayılan değer ataması yapalım. Böylece, eğer csm_result DataFrame'inde csm_closing sütunu yoksa, is_onerous_subsequently sütunu False olarak atanır.
+    # Subsequently onerous: IFRS17 floor makes reported CSM non-negative.
+    # Therefore we detect this using the *raw* (unclipped) closing CSM if available.
+    csm_closing_raw = csm_result.get("csm_closing_raw", csm_result.get("csm_closing", 0.0))
     csm_result["is_onerous_subsequently"] = (
-        (csm_result.get("csm_closing", 0) < 0)
+        (csm_closing_raw < 0)
         & (~csm_result["is_onerous_initial"])
     )
     
@@ -70,22 +72,26 @@ def detect_onerous_groups(
     # LOSS CALCULATION
     # ==================================================
     
-    #başlangıçta onerous olan gruplar için loss hesapla. Eğer is_onerous_initial sütunu True ise, onerous_loss_initial sütunu, bel_opening, ra_opening ve pv_premiums sütunlarının toplamının negatif değeri olarak hesaplanır. Eğer is_onerous_initial sütunu False ise, onerous_loss_initial sütunu 0 olarak atanır. Sonuç float32 türüne dönüştürülür.
-    csm_result["onerous_loss_initial"] = np.where(
-        csm_result["is_onerous_initial"],
-        -(csm_result.get("bel_opening", 0) + csm_result.get("ra_opening", 0) - csm_result.get("pv_premiums", 0)),
-        0
-    ).astype(np.float32)
+    # Initial onerous loss should be a POSITIVE amount (consistent with engine.csm output).
+    if "onerous_loss" in csm_result.columns:
+        csm_result["onerous_loss_initial"] = np.where(
+            csm_result["is_onerous_initial"],
+            csm_result["onerous_loss"],
+            0.0,
+        ).astype(np.float32)
+    else:
+        csm_result["onerous_loss_initial"] = np.where(
+            csm_result["is_onerous_initial"],
+            (csm_result.get("bel_opening", 0.0) + csm_result.get("ra_opening", 0.0) - csm_result.get("pv_premiums", 0.0)),
+            0.0,
+        ).clip(lower=0).astype(np.float32)
     
-    #sonradan onerous olan gruplar için loss hesapla. Eğer is_onerous_subsequently sütunu True ise, onerous_loss_subsequently sütunu csm_closing sütununun negatif değeri olarak hesaplanır. Eğer is_onerous_subsequently sütunu False ise, onerous_loss_subsequently sütunu 0 olarak atanır. Sonuç float32 türüne dönüştürülür.
+    # Subsequently onerous loss: positive amount = max(-csm_closing_raw, 0)
     csm_result["onerous_loss_subsequently"] = np.where(
         csm_result["is_onerous_subsequently"],
-        csm_result.get("csm_closing", 0),
-        0
-    )
-
-    # onerous_loss_subsequently sütunundaki pozitif değerleri 0'a kırp. Bu, sonradan onerous olan gruplar için sadece negatif loss değerlerinin dikkate alınmasını sağlar. Sonuç float32 türüne dönüştürülür.
-    csm_result["onerous_loss_subsequently"] = pd.Series(csm_result["onerous_loss_subsequently"]).clip(upper=0).astype(np.float32)
+        (-pd.Series(csm_closing_raw)).clip(lower=0),
+        0.0,
+    ).astype(np.float32)
     
     # Total onerous loss
     csm_result["onerous_loss_total"] = (
@@ -244,7 +250,7 @@ def group_by_risk_characteristics(
     # ==================================================
     
     # Lapse riskini belirlemek için policy_id bazında ortalama lapse_rate hesapla. Bu, her poliçenin genel iptal risk seviyesini belirlemek için kullanılacak.
-    avg_lapse = projection.groupby("policy_id")["lapse_rate"].mean()
+    avg_lapse = projection.groupby("policy_id")["lapse_rate"].mean().fillna(0.0)
     
     # Lapse risk seviyelerini ata. Lapse risk seviyeleri, config'te tanımlanan eşiklere göre belirlenir.
     projection = projection.merge(
@@ -257,7 +263,8 @@ def group_by_risk_characteristics(
     projection["lapse_risk"] = pd.cut(
         projection["avg_lapse"],
         bins=[0, 0.05, 0.15, 1.0],
-        labels=["Low", "Medium", "High"]
+        labels=["Low", "Medium", "High"],
+        include_lowest=True,
     )
     
     # ==================================================

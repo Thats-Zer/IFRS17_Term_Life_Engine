@@ -43,6 +43,8 @@ def allocate_expenses(
         ValueError: Config giderleri geçersizse
     """
     projection = projection.copy()
+
+    expense_mult = float(getattr(config, "unit_expense_multiplier", 1.0) or 1.0)
     
     # Validation
     if config.acquisition_cost < 0:
@@ -58,7 +60,7 @@ def allocate_expenses(
     # Poliçe başında, ilk yılda ödenir
     projection["acquisition_cost"] = np.where(
         projection["Year"] == 1,
-        config.acquisition_cost,
+        float(config.acquisition_cost) * expense_mult,
         0
     ).astype(np.float32)
     
@@ -68,34 +70,34 @@ def allocate_expenses(
     # Sabit yıllık gider, enflasyona göre artar
     inflation_factor = ((1 + config.inflation_rate) ** (projection["Year"] - 1)).astype(np.float32)
     projection["admin_cost"] = (
-        config.admin_cost_per_policy * inflation_factor
+        (float(config.admin_cost_per_policy) * expense_mult) * inflation_factor
     ).astype(np.float32)
     
     # ==================================================
     # 3. COLLECTION COST (Premium'un Yüzdesi)
     # ==================================================
-    # Prim tahsilinde ödenen gider (ileride hesaplanacak)
-    # Burada placeholder, calculate_annual_premiums'dan sonra hesaplanacak
-    projection["collection_cost"] = 0.0  # Placeholder
+    # Prim tahsilinde ödenen gider: collection_cost_rate × collected premium
+    # Not: Gross premium hesaplanmadan kesinleşmez; cashflows adımında hesaplanır.
+    projection["collection_cost"] = 0.0  # placeholder
     
     # ==================================================
     # 4. MAINTENANCE COST (Poliçe Koruma Gideri)
     # ==================================================
     # Poliçe aktif olduğu sürece yıllık gider
     projection["maintenance_cost"] = (
-        config.maintenance_cost_per_policy * inflation_factor
+        (float(config.maintenance_cost_per_policy) * expense_mult) * inflation_factor
     ).astype(np.float32)
     
     # ==================================================
     # TOTAL EXPENSE (Henüz Collection Cost hariç)
     # ==================================================
-    projection["total_expense_before_collection"] = (
+    projection["total_expense_base"] = (
         projection["acquisition_cost"]
         + projection["admin_cost"]
         + projection["maintenance_cost"]
     ).astype(np.float32)
     
-    logger.debug("✓ Gidiler tahsis edildi (acquisition, admin, maintenance)")
+    logger.debug("✓ Giderler tahsis edildi (acquisition, admin, maintenance)")
     
     return projection
 
@@ -210,6 +212,11 @@ def calculate_annual_premiums(
         ValueError: Premium parameters geçersizse
     """
     projection = projection.copy()
+
+    if "coverage_years" in projection.columns:
+        in_force = (projection["Year"] <= projection["coverage_years"]).astype(np.float32)
+    else:
+        in_force = np.float32(1.0)
     
     # Validation
     if config.profit_margin < 0 or config.profit_margin > 1:
@@ -218,25 +225,11 @@ def calculate_annual_premiums(
     # ==================================================
     # EXPENSE PROJECTION (ALREADY DONE)
     # ==================================================
-    if "total_expense_before_collection" not in projection.columns:
+    if "total_expense_base" not in projection.columns:
         projection = allocate_expenses(projection, config)
     
-    # ==================================================
-    # COLLECTION COST (NOW CALCULATE)
-    # ==================================================
-    # Collection cost henüz gross premium hesaplanmadığı için
-    # iteratif yaklaşım gerekli veya simplification kullan
-    # Simplification: Collection cost = admin_cost'un % X'i
-    projection["collection_cost"] = (
-        projection["total_expense_before_collection"]
-        * config.collection_cost_rate
-    ).astype(np.float32)
-    
-    # Total expense (collection cost included)
-    projection["total_expense"] = (
-        projection["total_expense_before_collection"]
-        + projection["collection_cost"]
-    ).astype(np.float32)
+    # Collection cost premium'un yüzdesidir; gross premium belirlendikten sonra cashflows adımında hesaplanır.
+    projection["total_expense"] = projection["total_expense_base"].astype(np.float32)
     
     # ==================================================
     # PV CALCULATIONS (POLIÇE BAZINDA TOPLAMA)
@@ -244,7 +237,8 @@ def calculate_annual_premiums(
     
     # PV of expected claims (with survival and lapse)
     projection["unit_claim_pv"] = (
-        projection["survival_ratio"]
+        in_force
+        * projection["survival_ratio"]
         * projection["qx"]
         * projection["sum_assured"]
         * projection["discount_factor"]
@@ -252,27 +246,23 @@ def calculate_annual_premiums(
     
     # PV of total expenses
     projection["unit_expense_pv"] = (
-        projection["survival_ratio"]
+        in_force
+        * projection["survival_ratio"]
         * (1 - projection["lapse_rate"])
         * projection["total_expense"]
         * projection["discount_factor"]
     ).astype(np.float32)
     
-    # PV of surrender charges (poliçe iptali sırasında)
-    projection = calculate_surrender_charges(projection, config)
-    
-    projection["unit_surrender_pv"] = (
-        projection["survival_ratio"]
-        * projection["lapse_rate"]
-        * projection["surrender_charge"]
-        * projection["discount_factor"]
-    ).astype(np.float32)
+    # Not: Surrender benefit modeli premium'a bağlı olduğundan net premium pricing içinde tam çözüm iteratif olur.
+    # Bu engine'de net premium pricing'de surrender etkisi ihmal edilir (0) — yanlış işaret/double-count riskini önler.
+    projection["unit_surrender_pv"] = np.float32(0.0)
     
     # PV of premium annuity (annuity due - yıl başında ödenebilir)
+    # Premium annuity PV (annuity-due): prim yıl başında ödenir; lapse aynı yılın primini azaltmaz.
     projection["premium_annuity_pv"] = (
-        projection["survival_ratio"]
-        * (1 - projection["lapse_rate"])
-        * projection["discount_factor_opening"]  # Annuity due için opening factor
+        in_force
+        * projection["survival_ratio"]
+        * projection["discount_factor_opening"]
     ).astype(np.float32)
     
     # ==================================================
@@ -299,7 +289,7 @@ def calculate_annual_premiums(
     # Denominator koruma (division by zero)
     premium_calc["premium_annuity_pv"] = premium_calc["premium_annuity_pv"].replace(0, np.nan)
     
-    # Net premium: (Claims + Expenses + Surrender Charges) / Annuity
+    # Net premium: (Claims + Expenses) / Annuity
     premium_calc["net_annual_premium"] = (
         (premium_calc["unit_claim_pv"]
          + premium_calc["unit_expense_pv"]
@@ -388,6 +378,15 @@ def calculate_cashflows(
         ValueError: Veriler geçersizse
     """
     projection = projection.copy()
+
+    float_dtype = np.float64 if bool(getattr(config, "use_float64", False)) else np.float32
+
+    if "coverage_years" in projection.columns:
+        in_force = (projection["Year"] <= projection["coverage_years"]).astype(np.float32)
+    else:
+        in_force = np.float32(1.0)
+
+    expense_mult = float(getattr(config, "unit_expense_multiplier", 1.0) or 1.0)
     
     # ==================================================
     # PREMIUM CALCULATION (YÖKSEKSELTİLMİŞ)
@@ -400,18 +399,32 @@ def calculate_cashflows(
     # INFLOWS
     # ==================================================
     
-    # Gross premium inflow (survival × (1-lapse) × gross_premium)
+    # Gross premium inflow (prim yıl başında ödenir): in_force_opening × gross_premium
     projection["Gross_Premium_Inflow"] = (
-        projection["survival_ratio"]
-        * (1 - projection["lapse_rate"])
+        in_force
+        * projection["survival_ratio"]
         * projection["gross_annual_premium"]
     ).astype(np.float32)
     
     # Net premium inflow (cost basis için)
     projection["Net_Premium_Inflow"] = (
-        projection["survival_ratio"]
-        * (1 - projection["lapse_rate"])
+        in_force
+        * projection["survival_ratio"]
         * projection["net_annual_premium"]
+    ).astype(np.float32)
+
+    # Collection cost: premium'un yüzdesi (scenario expense multiplier dahil)
+    projection["collection_cost"] = (
+        projection["Gross_Premium_Inflow"]
+        * float(config.collection_cost_rate)
+        * expense_mult
+    ).astype(np.float32)
+
+    # Total expense (collection dahil)
+    if "total_expense_base" not in projection.columns:
+        projection = allocate_expenses(projection, config)
+    projection["total_expense"] = (
+        projection["total_expense_base"].astype(np.float32) + projection["collection_cost"]
     ).astype(np.float32)
     
     # ==================================================
@@ -419,7 +432,8 @@ def calculate_cashflows(
     # ==================================================
     
     projection["Death_Benefits"] = (
-        projection["survival_ratio"]
+        in_force
+        * projection["survival_ratio"]
         * projection["qx"]
         * projection["sum_assured"]
     ).astype(np.float32)
@@ -428,15 +442,15 @@ def calculate_cashflows(
     # OUTFLOWS - SURRENDER BENEFITS
     # ==================================================
     
-    # Iptali halinde, net prim artık hesaplanmış olacağından,
-    # poliçe sahibi rezerv miktarı alır (surrender value)
+    # İptal halinde (basitleştirilmiş): surrender value ≈ o yılın net yıllık primi
     if "surrender_charge" not in projection.columns:
         projection = calculate_surrender_charges(projection, config)
     
     projection["Surrender_Benefit"] = (
-        projection["survival_ratio"]
+        in_force
+        * projection["survival_ratio"]
         * projection["lapse_rate"]
-        * (projection["Net_Premium_Inflow"] - projection["surrender_charge"])
+        * (projection["net_annual_premium"] - projection["surrender_charge"])
     ).clip(lower=0).astype(np.float32)
     
     # ==================================================
@@ -447,7 +461,8 @@ def calculate_cashflows(
         projection = allocate_expenses(projection, config)
     
     projection["Operating_Expenses"] = (
-        projection["survival_ratio"]
+        in_force
+        * projection["survival_ratio"]
         * (1 - projection["lapse_rate"])
         * projection["total_expense"]
     ).astype(np.float32)
@@ -456,16 +471,17 @@ def calculate_cashflows(
     # OUTFLOWS - REINSURANCE CEDING
     # ==================================================
     
-    # Reasürans bedeli (death benefit'in yüzdesi)
+    # Basit reasürans modeli:
+    # - Reinsurance_Ceding: reasürans primi (prim tahsilatıyla orantılı)
+    # - Reinsurance_Recovery: ölüm tazminatının ceded kısmı (inflow)
     projection["Reinsurance_Ceding"] = (
-        projection["Death_Benefits"]
-        * config.reinsurance_cost_rate
+        projection["Gross_Premium_Inflow"]
+        * float(config.reinsurance_cost_rate)
     ).astype(np.float32)
-    
-    # Reinsurance recovery (ölüm halinde, reasüranstan alınan)
+
     projection["Reinsurance_Recovery"] = (
         projection["Death_Benefits"]
-        * config.reinsurance_cost_rate
+        * float(config.reinsurance_cost_rate)
     ).astype(np.float32)
     
     # ==================================================
@@ -480,10 +496,10 @@ def calculate_cashflows(
         * config.counterparty_lgd
     ).astype(np.float32)
     
-    # Net death benefit (reinsurance sonrası)
+    # Net death benefit (reinsurance recovery sonrası)
     projection["Net_Death_Benefit"] = (
         projection["Death_Benefits"]
-        - projection["Reinsurance_Ceding"]
+        - projection["Reinsurance_Recovery"]
     ).astype(np.float32)
     
     # ==================================================
@@ -494,33 +510,50 @@ def calculate_cashflows(
         projection["Net_Death_Benefit"]
         + projection["Surrender_Benefit"]
         + projection["Operating_Expenses"]
+        + projection["Reinsurance_Ceding"]
         + projection["Counterparty_Default_Cost"]
-    ).astype(np.float32)
+    ).astype(float_dtype)
     
-    projection["Net_Cash_Flow"] = (
+    projection["Total_Inflows"] = (
         projection["Gross_Premium_Inflow"]
+        + projection["Reinsurance_Recovery"]
+    ).astype(float_dtype)
+
+    projection["Net_Cash_Flow"] = (
+        projection["Total_Inflows"]
         - projection["Total_Outflows"]
-    ).astype(np.float32)
+    ).astype(float_dtype)
     
     # ==================================================
     # PRESENT VALUE CALCULATIONS
     # ==================================================
     
-    pv_columns = [
-        "Gross_Premium_Inflow",
+    # PV CALCULATIONS — timing convention:
+    # - Premium inflows & reinsurance premium at period start => discount_factor_opening
+    # - Claims/expenses/surrender/recovery at period end => discount_factor
+    if "discount_factor_opening" not in projection.columns:
+        projection["discount_factor_opening"] = projection["discount_factor"]
+
+    opening_cols = ["Gross_Premium_Inflow", "Net_Premium_Inflow", "Reinsurance_Ceding"]
+    closing_cols = [
         "Death_Benefits",
         "Surrender_Benefit",
         "Operating_Expenses",
-        "Reinsurance_Ceding",
+        "Reinsurance_Recovery",
         "Counterparty_Default_Cost",
+        "Net_Death_Benefit",
+        "Total_Inflows",
         "Total_Outflows",
-        "Net_Cash_Flow"
+        "Net_Cash_Flow",
     ]
-    
-    for col in pv_columns:
-        projection[f"PV_{col}"] = (
-            projection[col] * projection["discount_factor"]
-        ).astype(np.float32)
+
+    for col in opening_cols:
+        if col in projection.columns:
+            projection[f"PV_{col}"] = (projection[col] * projection["discount_factor_opening"]).astype(float_dtype)
+
+    for col in closing_cols:
+        if col in projection.columns:
+            projection[f"PV_{col}"] = (projection[col] * projection["discount_factor"]).astype(float_dtype)
     
     logger.info("✓ Nakit akışları hesaplandı (inflow, outflow, PV)")
     
@@ -542,10 +575,6 @@ def test_cashflows() -> None:
     4. Death benefit hesabı
     5. Net cash flow
     """
-    import sys
-    from pathlib import Path
-    sys.path.insert(0, str(Path(__file__).parent.parent))
-    
     from engine.assumptions import loadconfig
     from engine.curves import create_discount_curve
     from engine.projection import (

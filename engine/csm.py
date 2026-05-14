@@ -25,7 +25,10 @@ def calculate_initial_csm(
     IFRS17 Başlangıç Contractual Service Margin (CSM) hesapla.
     
     CSM Tanımı:
-    CSM = PV(Premiums) - BEL - RA
+    CSM = PV(Premiums) - (BEL + RA)
+
+    Not:
+    - Bu engine'de BEL "liability-positive" kabul edilir (outflows - inflows).
     
     Onerous Kontrat Kontrolü:
     - Eğer (BEL + RA) > PV(Premiums) ise: CSM = 0, Onerous Loss kaydedilir
@@ -46,6 +49,8 @@ def calculate_initial_csm(
     Raises:
         ValueError: Veriler geçersizse
     """
+
+    float_dtype = np.float64 if bool(getattr(config, "use_float64", False)) else np.float32
     
     # ==================================================
     # PREMIUM ANNUITY PV
@@ -72,7 +77,7 @@ def calculate_initial_csm(
                     proj = proj.copy()
                     proj[pv_col] = (
                         proj["Gross_Premium_Inflow"] * proj["discount_factor"]
-                    ).astype(np.float32)
+                    ).astype(float_dtype)
                 else:
                     pv_col = None
 
@@ -85,12 +90,12 @@ def calculate_initial_csm(
 
         if pv_premiums_df is not None:
             bel_result = bel_result.merge(pv_premiums_df, on="policy_id", how="left")
-            bel_result["pv_premiums"] = bel_result["pv_premiums"].fillna(0.0).astype(np.float32)
+            bel_result["pv_premiums"] = bel_result["pv_premiums"].fillna(0.0).astype(float_dtype)
         else:
             bel_result["pv_premiums"] = (
                 bel_result["bel_per_policy"]
                 * (1 + config.premium_margin)
-            ).astype(np.float32)
+            ).astype(float_dtype)
 
         # ==================================================
         # PLAIN COVER (EXPECTED DEATH BENEFIT)
@@ -113,8 +118,8 @@ def calculate_initial_csm(
                     proj = proj.copy()
                     proj["Death_Benefits"] = (
                         proj["survival_ratio"] * proj["qx"] * proj["sum_assured"]
-                    ).astype(np.float32)
-                    proj[pv_death_col] = (proj["Death_Benefits"] * proj["discount_factor"]).astype(np.float32)
+                    ).astype(float_dtype)
+                    proj[pv_death_col] = (proj["Death_Benefits"] * proj["discount_factor"]).astype(float_dtype)
                 else:
                     pv_death_col = None
 
@@ -125,7 +130,7 @@ def calculate_initial_csm(
                         .rename(columns={pv_death_col: "pv_death_benefits"})
                     )
                     bel_result = bel_result.merge(pv_death_df, on="policy_id", how="left")
-                    bel_result["pv_death_benefits"] = bel_result["pv_death_benefits"].fillna(0.0).astype(np.float32)
+                    bel_result["pv_death_benefits"] = bel_result["pv_death_benefits"].fillna(0.0).astype(float_dtype)
     
     # ==================================================
     # MERGE BEL VE RA
@@ -143,20 +148,20 @@ def calculate_initial_csm(
         + csm_data["ra_per_policy"]
     )
     
-    csm_data["initial_csm"] = (
+    csm_data["initial_csm_raw"] = (
         csm_data["pv_premiums"]
         - csm_data["total_liability"]
-    ).astype(np.float32)
+    ).astype(float_dtype)
     
     # ==================================================
     # ONEROUS CONTRACT DETECTION
     # ==================================================
     
-    csm_data["is_onerous"] = csm_data["initial_csm"] < 0
-    
-    # Onerous poliçelerde CSM = 0, loss ayrıca kaydedilir
-    csm_data["onerous_loss"] = np.minimum(csm_data["initial_csm"], 0).astype(np.float32)
-    csm_data["initial_csm"] = csm_data["initial_csm"].clip(lower=0).astype(np.float32)
+    csm_data["is_onerous"] = csm_data["initial_csm_raw"] < 0
+
+    # Onerous poliçelerde CSM = 0, loss ayrıca kaydedilir (pozitif tutar)
+    csm_data["onerous_loss"] = np.maximum(-csm_data["initial_csm_raw"], 0).astype(float_dtype)
+    csm_data["initial_csm"] = csm_data["initial_csm_raw"].clip(lower=0).astype(float_dtype)
     
     # ==================================================
     # LOGGING
@@ -177,7 +182,11 @@ def calculate_initial_csm(
         f"Avg={csm_data['initial_csm'].mean():,.2f}"
     )
     
-    return csm_data[["policy_id", "initial_csm", "is_onerous"]]
+    # pv_premiums/onerous_loss output'ta tutulur (rollforward + grouping için)
+    cols = ["policy_id", "pv_premiums", "initial_csm", "is_onerous", "onerous_loss"]
+    if "pv_death_benefits" in csm_data.columns:
+        cols.append("pv_death_benefits")
+    return csm_data[cols]
 
 
 # ==================================================
@@ -427,45 +436,35 @@ def calculate_csm_release(
     )
     
     # ==================================================
-    # NORMAL CSM RELEASE (COVERAGE PERIOD BASIS)
+    # COVERAGE-UNITS BASED RELEASE (avoid double counting)
     # ==================================================
-    
-    # Remaining coverage years
-    projection["remaining_coverage_years"] = (
-        projection["coverage_years"] - projection["Year"] + 1
-    ).clip(lower=0).astype(np.int16)
-    
-    # Normal release
-    projection["normal_csm_release"] = (
+    # Coverage units proxy (term-life): in-force at period start.
+    # Expected in-force weight = survival_ratio * (1 - lapse_rate)
+    # Release each period proportionally: opening_csm * units_t / sum(units)
+
+    if "coverage_years" not in projection.columns:
+        projection["coverage_years"] = int(getattr(config, "coverage_years", getattr(config, "projection_years", 1)) or 1)
+
+    if "in_force" in projection.columns:
+        in_force = projection["in_force"].astype(np.float32)
+    else:
+        in_force = (projection["Year"] <= projection["coverage_years"]).astype(np.float32)
+
+    projection["coverage_units"] = (
+        in_force
+        * projection.get("survival_ratio", 1.0)
+        * (1 - projection.get("lapse_rate", 0.0))
+    ).astype(np.float32)
+
+    total_units = projection.groupby("policy_id", sort=False)["coverage_units"].transform("sum").replace(0, np.nan)
+    projection["csm_release"] = (
         projection["opening_csm"]
-        / projection["coverage_years"]
-    ).astype(np.float32)
-    
-    # ==================================================
-    # LAPSE EFFECT ON CSM RELEASE
-    # ==================================================
-    
-    # Poliçe iptal halinde: tüm kalan CSM release edilir
-    projection["lapse_csm_release"] = (
-        projection["lapse_rate"]
-        * projection["opening_csm"]
-        * (projection["remaining_coverage_years"] / projection["coverage_years"])
-    ).astype(np.float32)
-    
-    # ==================================================
-    # TOTAL CSM RELEASE
-    # ==================================================
-    
-    projection["total_csm_release"] = (
-        projection["normal_csm_release"]
-        + projection["lapse_csm_release"]
-    ).astype(np.float32)
+        * (projection["coverage_units"] / total_units)
+    ).fillna(0.0).astype(np.float32)
     
     logger.debug("✓ CSM release hesaplandı")
     
-    return projection[["policy_id", "Year", "total_csm_release"]].rename(
-        columns={"total_csm_release": "csm_release"}
-    )
+    return projection[["policy_id", "Year", "csm_release"]]
 
 
 # ==================================================
@@ -517,35 +516,27 @@ def calculate_csm_rollforward(
     # STEP 2: OPENING LIABILITY
     # ==================================================
     
-    opening_liability = bel_result.merge(ra_result, on="policy_id").merge(
-        csm_opening[["policy_id", "initial_csm"]],
-        on="policy_id"
+    # Opening balances: explicitly map known column names
+    opening_liability = (
+        bel_result[["policy_id", "bel_per_policy"]]
+        .merge(ra_result[["policy_id", "ra_per_policy"]], on="policy_id", how="left")
+        .merge(csm_opening[["policy_id", "initial_csm", "is_onerous", "onerous_loss", "pv_premiums"]], on="policy_id", how="left")
+        .rename(
+            columns={
+                "bel_per_policy": "bel_opening",
+                "ra_per_policy": "ra_opening",
+                "initial_csm": "csm_opening",
+            }
+        )
     )
-    
-    # policy_id yoksa index'ten üret
-    if "policy_id" not in opening_liability.columns:
-        opening_liability = opening_liability.reset_index().rename(columns={"index": "policy_id"})
 
-    # Olası alternatif kolon adlarını yakala
-    column_aliases = {
-        "bel_opening": ["bel_opening", "BEL_opening", "BEL", "bel", "initial_bel"],
-        "ra_opening": ["ra_opening", "RA_opening", "RA", "ra", "initial_ra"],
-        "csm_opening": ["csm_opening", "CSM_opening", "CSM", "csm", "initial_csm"],
-        "is_onerous": ["is_onerous", "onerous", "onerous_flag"],
-    }
-
-    for target, aliases in column_aliases.items():
-        if target in opening_liability.columns:
-            continue
-        found = next((c for c in aliases if c in opening_liability.columns), None)
-        if found is not None:
-            opening_liability = opening_liability.rename(columns={found: target})
-        else:
-            opening_liability[target] = 0.0 if target != "is_onerous" else False
-
-    opening_liability = opening_liability.loc[
-        :, ["policy_id", "bel_opening", "ra_opening", "csm_opening", "is_onerous"]
-    ].copy()
+    opening_liability[["ra_opening", "csm_opening", "onerous_loss", "pv_premiums"]] = opening_liability[[
+        "ra_opening",
+        "csm_opening",
+        "onerous_loss",
+        "pv_premiums",
+    ]].fillna(0.0)
+    opening_liability["is_onerous"] = opening_liability["is_onerous"].fillna(False).astype(bool)
     
     # ==================================================
     # STEP 3: FINANCE COST
@@ -584,26 +575,33 @@ def calculate_csm_rollforward(
     )
     
     rollforward = rollforward.fillna(0)
+
+    float_dtype = np.float64 if bool(getattr(config, "use_float64", False)) else np.float32
     
     # ==================================================
     # CSM CLOSING
     # ==================================================
-    
-    rollforward["csm_closing"] = (
+
+    # Raw (unclipped) closing CSM is useful for detecting "subsequently onerous"
+    # situations where the service margin would become negative before IFRS17 floor at 0.
+    rollforward["csm_closing_raw"] = (
         rollforward["csm_opening"]
         + rollforward["finance_cost"]
         - rollforward["csm_release"]
         - rollforward["unlock_gain_loss"]
-    ).clip(lower=0).astype(np.float32)
+    ).astype(float_dtype)
+
+    rollforward["csm_closing"] = rollforward["csm_closing_raw"].clip(lower=0).astype(float_dtype)
     
     # ==================================================
     # LOSS COMPONENT (ONEROUS CONTRACTS)
     # ==================================================
     
+    # Loss component (onerous) = initial onerous loss (pozitif)
     rollforward["loss_component"] = np.where(
         rollforward["is_onerous"],
-        -rollforward["bel_opening"] - rollforward["ra_opening"],
-        0
+        rollforward.get("onerous_loss", 0.0),
+        0.0,
     ).astype(np.float32)
     
     logger.info(

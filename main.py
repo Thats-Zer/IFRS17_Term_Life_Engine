@@ -199,7 +199,9 @@ def main() -> None:
             if "coverage_years" not in projection.columns:
                 if "Year" not in projection.columns:
                     raise EngineException("Projection içinde 'Year' sütunu yok", step="CASHFLOWS")
-                projection["coverage_years"] = projection["Year"].astype(int)
+                # coverage_years poliçe-sabit bir terim olmalı; Year'a eşitlemek yanlış.
+                fallback_term = int(getattr(config, "coverage_years", getattr(config, "projection_years", 1)) or 1)
+                projection["coverage_years"] = fallback_term
                 #---> Nakit akışları hesaplanırken, coverage_years sütunu kullanılır.
                 # Eğer projection içinde coverage_years yoksa, Year sütunu coverage_years olarak kullanılır.
                 # Bu sayede, projection tablosunda Year varsa,
