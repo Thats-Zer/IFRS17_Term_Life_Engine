@@ -5,7 +5,7 @@ from typing import Any, Dict
 
 import pytest
 
-from engine.asumptions import loadconfig
+from engine.assumptions import loadconfig
 from engine.projection import load_mortality_table
 
 

@@ -12,10 +12,13 @@ logger = logging.getLogger(__name__)
 # ONEROUS GROUP DETECTION
 # ==================================================
 
+# Onerous grup tespiti yap. Hangi grupların onerous olduğunu belirlemek için kullanılır.
 def detect_onerous_groups(
     csm_result: pd.DataFrame,
     config: ModelConfig
 ) -> pd.DataFrame:
+    
+
     """
     Onerous grup tespiti (KOMPLEKS YÖNTEM).
     
@@ -39,21 +42,25 @@ def detect_onerous_groups(
         pd.DataFrame: Onerous group flag ve loss amount
     """
     
+    # CSM sonuçlarını kopyala (orijinal DataFrame'i değiştirmemek için)
     csm_result = csm_result.copy()
     
+
     # ==================================================
     # ONEROUS GROUP FLAGS
     # ==================================================
     
-    # Initial onerous (CSM opening < 0)
+
+    # is_onerous_initial sütunu oluşturulurken get() metodu kullanarak varsayılan değer ataması yapalım. Böylece, eğer csm_result DataFrame'inde is_onerous sütunu yoksa, is_onerous_initial sütunu False olarak atanır.
     csm_result["is_onerous_initial"] = csm_result.get("is_onerous", False)
     
-    # Subsequently onerous (CSM closing < 0, opening was not)
+    # is_onerous_subsequently sütunu oluşturulurken get() metodu kullanarak varsayılan değer ataması yapalım. Böylece, eğer csm_result DataFrame'inde csm_closing sütunu yoksa, is_onerous_subsequently sütunu False olarak atanır.
     csm_result["is_onerous_subsequently"] = (
         (csm_result.get("csm_closing", 0) < 0)
         & (~csm_result["is_onerous_initial"])
     )
     
+    # is_onerous_group sütunu, is_onerous_initial veya is_onerous_subsequently sütunlarından herhangi biri True ise True olur. Böylece, bir poliçe ya baştan onerous ise ya da sonradan onerous olmuşsa, is_onerous_group sütunu True olarak atanır.
     csm_result["is_onerous_group"] = (
         csm_result["is_onerous_initial"]
         | csm_result["is_onerous_subsequently"]
@@ -63,19 +70,21 @@ def detect_onerous_groups(
     # LOSS CALCULATION
     # ==================================================
     
-    # Initial onerous loss
+    #başlangıçta onerous olan gruplar için loss hesapla. Eğer is_onerous_initial sütunu True ise, onerous_loss_initial sütunu, bel_opening, ra_opening ve pv_premiums sütunlarının toplamının negatif değeri olarak hesaplanır. Eğer is_onerous_initial sütunu False ise, onerous_loss_initial sütunu 0 olarak atanır. Sonuç float32 türüne dönüştürülür.
     csm_result["onerous_loss_initial"] = np.where(
         csm_result["is_onerous_initial"],
         -(csm_result.get("bel_opening", 0) + csm_result.get("ra_opening", 0) - csm_result.get("pv_premiums", 0)),
         0
     ).astype(np.float32)
     
-    # Subsequently onerous loss
+    #sonradan onerous olan gruplar için loss hesapla. Eğer is_onerous_subsequently sütunu True ise, onerous_loss_subsequently sütunu csm_closing sütununun negatif değeri olarak hesaplanır. Eğer is_onerous_subsequently sütunu False ise, onerous_loss_subsequently sütunu 0 olarak atanır. Sonuç float32 türüne dönüştürülür.
     csm_result["onerous_loss_subsequently"] = np.where(
         csm_result["is_onerous_subsequently"],
         csm_result.get("csm_closing", 0),
         0
     )
+
+    # onerous_loss_subsequently sütunundaki pozitif değerleri 0'a kırp. Bu, sonradan onerous olan gruplar için sadece negatif loss değerlerinin dikkate alınmasını sağlar. Sonuç float32 türüne dönüştürülür.
     csm_result["onerous_loss_subsequently"] = pd.Series(csm_result["onerous_loss_subsequently"]).clip(upper=0).astype(np.float32)
     
     # Total onerous loss
@@ -84,23 +93,27 @@ def detect_onerous_groups(
         + csm_result["onerous_loss_subsequently"]
     ).astype(np.float32)
     
+    # Onerous grup sayısını ve toplam loss miktarını logla
     logger.info(
         f"✓ Onerous grupos detected: "
         f"Initial={csm_result['is_onerous_initial'].sum()}, "
         f"Subsequently={csm_result['is_onerous_subsequently'].sum()}"
     )
     
-    return csm_result
+    return csm_result # is_onerous_group, onerous_loss_total gibi yeni sütunlar eklenmiş olarak döner.
 
 
 # ==================================================
 # BUSINESS NATURE GROUPING
 # ==================================================
 
+# Poliçeleri business nature'a göre grupla. Bu, IFRS17 raporlaması için önemli bir adımdır.
 def group_by_business_nature(
     projection: pd.DataFrame,
     config: ModelConfig
 ) -> pd.DataFrame:
+    
+    
     """
     Poliçeleri business nature'a göre grupla.
     
@@ -122,12 +135,14 @@ def group_by_business_nature(
         pd.DataFrame: business_nature grubu eklendi
     """
     
+    # Projection tablosunu kopyala (orijinal DataFrame'i değiştirmemek için)
     projection = projection.copy()
     
     # ==================================================
     # BUSINESS NATURE ASSIGNMENT
     # ==================================================
     
+    # Öncelikle tüm poliçeleri "Term Life" olarak ata (default)
     projection["business_nature"] = "Term Life"  # Default
     
     # Longer term poliçeler
@@ -136,13 +151,21 @@ def group_by_business_nature(
         "business_nature"
     ] = "Permanent Life"
     
-    # Participating ürünler (if applicable)
+    # Participating ürünler için özel bir işaret varsa, onları "Participating" olarak ata
     if "is_participating" in projection.columns:
         projection.loc[
             projection["is_participating"],
             "business_nature"
         ] = "Participating"
     
+    # Investment linked ürünler için özel bir işaret varsa, onları "Investment Linked" olarak ata
+    if "is_investment_linked" in projection.columns:
+        projection.loc[
+            projection["is_investment_linked"],
+            "business_nature"
+        ] = "Investment Linked"
+
+    # Business nature gruplarını logla
     logger.debug(f"✓ Grouped by business nature: {projection['business_nature'].unique()}")
     
     return projection
@@ -152,10 +175,13 @@ def group_by_business_nature(
 # RISK GROUP ASSIGNMENT
 # ==================================================
 
+# Poliçeleri risk karakteristiklerine göre grupla. Bu, risk ayarlamasının daha doğru hesaplanması için önemlidir.
 def group_by_risk_characteristics(
     projection: pd.DataFrame,
     config: ModelConfig
 ) -> pd.DataFrame:
+    
+    
     """
     Poliçeleri risk özelliklerine göre grupla.
     
@@ -174,14 +200,20 @@ def group_by_risk_characteristics(
         pd.DataFrame: risk_group eklendi
     """
     
+    # Projection tablosunu kopyala (orijinal DataFrame'i değiştirmemek için)
     projection = projection.copy()
     
     # ==================================================
     # RISK LEVEL
     # ==================================================
     
+    # qx'e göre risk seviyesini belirle. Öncelikle policy_id bazında ortalama qx hesapla. Bu, her poliçenin genel risk seviyesini belirlemek için kullanılacak.
     avg_qx = projection.groupby("policy_id")["qx"].mean()
     
+    # qx değerlerine göre risk seviyesini ata. Risk seviyeleri, config'te tanımlanan eşiklere göre belirlenir.
+    # Eğer avg_qx değeri low_risk_qx_threshold eşik değerinden küçük veya eşitse, risk seviyesi "Low" olarak atanır. 
+    # Eğer avg_qx değeri low_risk_qx_threshold ile medium_risk_qx_threshold arasında ise, risk seviyesi "Medium" olarak atanır. 
+    # Eğer avg_qx değeri medium_risk_qx_threshold eşik değerinden büyük ise, risk seviyesi "High" olarak atanır.
     projection = projection.merge(
         avg_qx.to_frame("avg_qx"),
         left_on="policy_id",
@@ -189,12 +221,14 @@ def group_by_risk_characteristics(
         how="left"
     )
     
+
     risk_thresholds = {
         "Low": getattr(config, "low_risk_qx_threshold", 0.01),
         "Medium": getattr(config, "medium_risk_qx_threshold", 0.05),
         "High": float("inf")
     }
     
+    # risk seviyelerini logla
     for level, threshold in risk_thresholds.items():
         if level == "Low":
             mask = projection["avg_qx"] <= threshold
@@ -209,8 +243,10 @@ def group_by_risk_characteristics(
     # LAPSE RISK GROUP
     # ==================================================
     
+    # Lapse riskini belirlemek için policy_id bazında ortalama lapse_rate hesapla. Bu, her poliçenin genel iptal risk seviyesini belirlemek için kullanılacak.
     avg_lapse = projection.groupby("policy_id")["lapse_rate"].mean()
     
+    # Lapse risk seviyelerini ata. Lapse risk seviyeleri, config'te tanımlanan eşiklere göre belirlenir.
     projection = projection.merge(
         avg_lapse.to_frame("avg_lapse"),
         left_on="policy_id",
@@ -228,6 +264,7 @@ def group_by_risk_characteristics(
     # REINSURANCE GROUP
     # ==================================================
 
+# Reinsurance durumunu belirle. Eğer is_reinsured sütunu varsa, bu sütuna göre "Ceded" veya "Retained" olarak grupla. Eğer is_reinsured sütunu yoksa, tüm poliçeler "Retained" olarak kabul edilir.
     projection["reinsurance_group"] = "Retained"
     if "is_reinsured" in projection.columns:
         projection.loc[projection["is_reinsured"].fillna(False).astype(bool), "reinsurance_group"] = "Ceded"
@@ -236,25 +273,30 @@ def group_by_risk_characteristics(
     # RISK GROUP
     # ==================================================
 
+    # Risk grubu ataması yap. Bu örnekte, risk grubu sadece risk_level ve lapse_risk kombinasyonuna göre belirleniyor. Ancak, reinsurance_group gibi diğer faktörler de dahil edilebilir.
     projection["risk_group"] = "DEFAULT"
     if getattr(config, "use_risk_grouping", False) and "some_column" in projection.columns:
         mask = projection["some_column"].notna()
         projection.loc[mask, "risk_group"] = "GROUP_1"
 
+    # Risk karakteristiklerine göre grupları logla
     logger.debug(f"✓ Grouped by risk characteristics")
 
-    return projection
+    return projection # risk_level, lapse_risk ve reinsurance_group gibi yeni sütunlar eklenmiş olarak döner.
 
 
 # ==================================================
 # GROUP LEVEL AGGREGATION
 # ==================================================
 
+# IFRS17 gruplarını ata ve grup bazında aggrege et. Bu, raporlama ve analiz için önemli bir adımdır.
 def assign_ifrs17_groups(
     csm_result: pd.DataFrame,
     projection: pd.DataFrame,
     config: ModelConfig
 ) -> pd.DataFrame:
+    
+
     """
     IFRS17 gruplarını ata ve grup bazında aggrege et.
     
@@ -277,23 +319,26 @@ def assign_ifrs17_groups(
         pd.DataFrame: Grup bazında aggregasyon
     """
     
+
     # ==================================================
     # GROUP ASSIGNMENT
     # ==================================================
     
-    # Business nature grouping
+
+    # Öncelikle business nature'a göre grupla. Bu, tüm gruplama işlemlerinin temelini oluşturur. Business nature, poliçelerin işlevselliğine göre sınıflandırılmasıdır
     projection = group_by_business_nature(projection, config)
     
-    # Risk grouping
+    # Risk karakteristiklerine göre grupla. Bu, risk ayarlamasının daha doğru hesaplanması için önemlidir.
     projection = group_by_risk_characteristics(projection, config)
     
-    # Onerous grouping
+    # Onerous grup tespiti yap. Hangi grupların onerous olduğunu belirlemek için kullanılır.
     csm_result = detect_onerous_groups(csm_result, config)
     
     # ==================================================
     # GROUP KEYS
     # ==================================================
-    
+
+# Grup anahtarları oluştur. Business nature, risk_level ve lapse_risk kombinasyonuna göre grup anahtarı oluşturulur. Bu, her poliçenin hangi gruba ait olduğunu belirlemek için kullanılır.
     projection["group_id"] = (
         projection["business_nature"]
         + "_"
@@ -306,6 +351,7 @@ def assign_ifrs17_groups(
     # GROUP LEVEL AGGREGATION
     # ==================================================
     
+    # Grup bazında aggregasyon yap. group_id'ye göre gruplama yaparak, her grup için poliçe sayısı, toplam teminat tutarı ve ortalama coverage_years gibi özet istatistikler hesaplanır.
     group_agg = (
         projection
         .groupby("group_id", sort=False, as_index=False)
@@ -320,7 +366,7 @@ def assign_ifrs17_groups(
         })
     )
     
-    # Onerous flag merge
+    # CSM sonuçları ile grupları birleştir. CSM sonuçları, poliçe bazında olduğundan, group_id'ye göre gruplama yaparak onerous grup bilgilerini ekleyelim.
     policy_group_mapping = projection[["policy_id", "group_id"]].drop_duplicates()
     
     csm_group = (
@@ -335,11 +381,20 @@ def assign_ifrs17_groups(
         })
     )
     
+    # group_agg ile csm_group'u group_id üzerinden birleştir. Bu, her grup için onerous grup bilgilerini ve loss miktarlarını ekler.
     group_agg = group_agg.merge(csm_group, on="group_id", how="left")
     
+    # Onerous grup bilgisi olmayan gruplar için varsayılan değerler ata.
+    # Eğer is_onerous_group sütunu eksikse, False olarak atanır. Eğer onerous_loss_total sütunu eksikse, 0 olarak atanır. csm_opening ve csm_closing sütunları da eksikse, 0 olarak atanır.
+    group_agg["is_onerous_group"] = group_agg["is_onerous_group"].fillna(False)
+    group_agg["onerous_loss_total"] = group_agg["onerous_loss_total"].fillna(0)
+    group_agg["csm_opening"] = group_agg["csm_opening"].fillna(0)
+    group_agg["csm_closing"] = group_agg["csm_closing"].fillna(0)
+    
+    # Grup bazında onerous grup sayısını ve toplam loss miktarını logla
     logger.info(
         f"✓ IFRS17 groups assigned: {len(group_agg)} unique groups, "
         f"Onerous groups: {group_agg['is_onerous_group'].sum()}"
     )
     
-    return group_agg
+    return group_agg # group_id, n_policies, total_sum_assured, is_onerous_group, onerous_loss_total gibi sütunlar içeren grup bazında aggregasyon sonucu döner.

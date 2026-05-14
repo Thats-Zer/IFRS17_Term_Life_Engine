@@ -1,7 +1,7 @@
-import json
-from pathlib import Path
+import json #Bu kütüphane JSON veri alışverişi için yaygın olarak kullanılan bir formattır ve Python'da json modülü bu tür verileri kolayca okuyup yazmak için araçlar sağlar.
+from pathlib import Path #Bu kütüphane, dosya yollarını ve dizinleri yönetmek için kullanılır. Path sınıfı, dosya yollarını temsil eder ve dosya işlemleri için çeşitli yöntemler sunar.
 
-from model.config_model import ConfigModel
+from model.config_model import ConfigModel #Bu, model.config_model modülünden ConfigModel sınıfını içe aktarır. Bu sınıf, konfigürasyon verilerini temsil etmek ve doğrulamak için kullanılır.
 
 
 def loadconfig(config_path: str = "config/config.json") -> ConfigModel:

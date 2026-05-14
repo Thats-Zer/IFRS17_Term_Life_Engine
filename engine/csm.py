@@ -12,11 +12,15 @@ logger = logging.getLogger(__name__)
 # INITIAL CSM CALCULATION
 # ==================================================
 
+# CSM Hesaplama:
 def calculate_initial_csm(
     bel_result: pd.DataFrame,
     ra_result: pd.DataFrame,
-    config: ModelConfig
+    config: ModelConfig,
+    projection: Optional[pd.DataFrame] = None,
 ) -> pd.DataFrame:
+    
+
     """
     IFRS17 Başlangıç Contractual Service Margin (CSM) hesapla.
     
@@ -46,14 +50,82 @@ def calculate_initial_csm(
     # ==================================================
     # PREMIUM ANNUITY PV
     # ==================================================
-    # Unutulmuş: projection'dan PV(Premiums) alınması gerekir
-    # Burada simplified: assume PV premiums = BEL × (1 + markup)
     
+    # Unutulmuş: projection'dan PV(Premiums) alınması gerekir
+    # Öncelik: projection içinden poliçe bazında PV primleri topla.
+    # Fallback: (eski davranış) PV premiums ≈ BEL × (1 + premium_margin)
+
+    # projection'da PV primleri yoksa, bel_result üzerinden tahmini PV primleri hesapla
     if "pv_premiums" not in bel_result.columns:
-        bel_result["pv_premiums"] = (
-            bel_result["bel_per_policy"]
-            * (1 + config.premium_margin)
-        )
+        pv_premiums_df: Optional[pd.DataFrame] = None
+
+        if projection is not None:
+            proj = projection
+            if "policy_id" not in proj.columns:
+                logger.warning("projection'da policy_id yok; PV(Premiums) hesaplanamadı, fallback kullanıldı")
+            else:
+                pv_col: Optional[str]
+                if "PV_Gross_Premium_Inflow" in proj.columns:
+                    pv_col = "PV_Gross_Premium_Inflow"
+                elif "Gross_Premium_Inflow" in proj.columns and "discount_factor" in proj.columns:
+                    pv_col = "PV_Gross_Premium_Inflow"
+                    proj = proj.copy()
+                    proj[pv_col] = (
+                        proj["Gross_Premium_Inflow"] * proj["discount_factor"]
+                    ).astype(np.float32)
+                else:
+                    pv_col = None
+
+                if pv_col is not None and pv_col in proj.columns:
+                    pv_premiums_df = (
+                        proj.groupby("policy_id", sort=False, as_index=False)[pv_col]
+                        .sum()
+                        .rename(columns={pv_col: "pv_premiums"})
+                    )
+
+        if pv_premiums_df is not None:
+            bel_result = bel_result.merge(pv_premiums_df, on="policy_id", how="left")
+            bel_result["pv_premiums"] = bel_result["pv_premiums"].fillna(0.0).astype(np.float32)
+        else:
+            bel_result["pv_premiums"] = (
+                bel_result["bel_per_policy"]
+                * (1 + config.premium_margin)
+            ).astype(np.float32)
+
+        # ==================================================
+        # PLAIN COVER (EXPECTED DEATH BENEFIT)
+        # ==================================================
+        # Düz teminat hesabı: Expected death benefit = S(t-1) * qx_t * sum_assured
+        # PV = Expected death benefit * discount_factor
+        # Not: Bu değer CSM formülünde doğrudan kullanılmıyor; şeffaflık için poliçe bazında hesaplanır.
+
+        if projection is not None and "pv_death_benefits" not in bel_result.columns:
+            proj = projection
+            required = {"policy_id", "survival_ratio", "qx", "sum_assured"}
+            if not required.issubset(set(proj.columns)):
+                missing = sorted(required - set(proj.columns))
+                logger.warning(f"PV teminat hesaplanamadı; projection eksik kolonlar: {missing}")
+            else:
+                if "PV_Death_Benefits" in proj.columns:
+                    pv_death_col = "PV_Death_Benefits"
+                elif "discount_factor" in proj.columns:
+                    pv_death_col = "PV_Death_Benefits"
+                    proj = proj.copy()
+                    proj["Death_Benefits"] = (
+                        proj["survival_ratio"] * proj["qx"] * proj["sum_assured"]
+                    ).astype(np.float32)
+                    proj[pv_death_col] = (proj["Death_Benefits"] * proj["discount_factor"]).astype(np.float32)
+                else:
+                    pv_death_col = None
+
+                if pv_death_col is not None and pv_death_col in proj.columns:
+                    pv_death_df = (
+                        proj.groupby("policy_id", sort=False, as_index=False)[pv_death_col]
+                        .sum()
+                        .rename(columns={pv_death_col: "pv_death_benefits"})
+                    )
+                    bel_result = bel_result.merge(pv_death_df, on="policy_id", how="left")
+                    bel_result["pv_death_benefits"] = bel_result["pv_death_benefits"].fillna(0.0).astype(np.float32)
     
     # ==================================================
     # MERGE BEL VE RA
@@ -439,7 +511,7 @@ def calculate_csm_rollforward(
     # STEP 1: INITIAL CSM
     # ==================================================
     
-    csm_opening = calculate_initial_csm(bel_result, ra_result, config)
+    csm_opening = calculate_initial_csm(bel_result, ra_result, config, projection=projection)
     
     # ==================================================
     # STEP 2: OPENING LIABILITY

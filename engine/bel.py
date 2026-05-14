@@ -1,11 +1,14 @@
-from typing import Tuple, Optional
-import pandas as pd
-import numpy as np
-import logging
+from typing import Tuple, Optional #Bu modül, fonksiyon tiplerini belirtmek için kullanılır. 
 
-from model.config_model import ModelConfig
+import pandas as pd #Pandas, veri manipülasyonu ve analizi için kullanılan bir kütüphanedir. DataFrame yapısı sağlar.
 
-logger = logging.getLogger(__name__)
+import numpy as np #Numpy, sayısal hesaplamalar için kullanılan bir kütüphanedir. Diziler ve matrisler üzerinde işlem yapmayı sağlar.
+
+import logging #Logging, uygulama içinde loglama yapmak için kullanılan bir modüldür. Hata ayıklama ve izleme için kullanılır.
+
+from model.config_model import ModelConfig #ModelConfig, model yapılandırması için kullanılan bir sınıftır. Model parametrelerini içerir.
+
+logger = logging.getLogger(__name__) #Logger, bu modül için bir logger nesnesi oluşturur. Loglama işlemleri bu nesne üzerinden yapılır.
 
 
 # ==================================================
@@ -14,7 +17,7 @@ logger = logging.getLogger(__name__)
 
 def calculate_bel(
     projection: pd.DataFrame,
-    config: ModelConfig
+    config: ModelConfig #bel hesaplama için gerekli yapılandırma parametrelerini içeren ModelConfig içeri alınır.
 ) -> pd.DataFrame:
     """
     IFRS17 Best Estimate Liability (BEL) hesapla.
@@ -42,12 +45,6 @@ def calculate_bel(
     - Lapse etkisi: (1 - lapse_rate) çarpanı
     - Policyholder behavior: stokastik mortalite ve lapse
     
-    Edge Cases:
-    1. Early Surrender (Yıl 1-2): Acquisition cost recovery
-    2. Maturity (Son Yıl): Sıfır surrender value
-    3. Full Lapse: Poliçe iptal, CF = 0
-    4. Multiple Deaths: Ortalama expected claims
-    
     Args:
         projection: Projection tablosu (cashflows eklenmiş)
         config: ModelConfig
@@ -61,6 +58,7 @@ def calculate_bel(
     
     if "PV_Net_Cash_Flow" not in projection.columns:
         raise ValueError("projection'da 'PV_Net_Cash_Flow' sütunu gerekli")
+    #Hata kontrol bloğu, PV_NetCash_Flow'u konntrol eder, yoksa hata uyarısı verir.
     
     # ==================================================
     # EARLY SURRENDER ADJUSTMENT
@@ -68,6 +66,7 @@ def calculate_bel(
     # Yıl 1-2'de surrender value negatif olabilir (acquisition cost recovery)
     
     projection["adjusted_surrender_benefit"] = projection["Surrender_Benefit"].copy()
+    # İlk 2 yıl için surrender benefit'i düzelt (acquisition cost recovery etkisi)
     
     # Yıl 1: Surrender benefit = 0 (minimum cash value)
     projection.loc[projection["Year"] == 1, "adjusted_surrender_benefit"] = 0
@@ -84,11 +83,13 @@ def calculate_bel(
     # ==================================================
     # MATURITY ADJUSTMENT
     # ==================================================
+
     # Son yıl: poliçe olgunlaştı, surrender value = 0
     
     if "coverage_years" in projection.columns:
         last_year_mask = projection["Year"] >= projection["coverage_years"]
         projection.loc[last_year_mask, "adjusted_surrender_benefit"] = 0
+    # Eğer coverage_years bilgisi varsa, son yıl ve sonrası için surrender benefit'i 0 yap.
     
     # ==================================================
     # LAPSE & MORTALITY CORRECTION
@@ -104,6 +105,7 @@ def calculate_bel(
         projection["qx"]
         * (1 - lapse_mortality_correlation * projection["lapse_rate"])
     ).clip(0, 1).astype(np.float32)
+    # Lapse oranı arttıkça, adjusted_qx azalır (selection effect). Clip ile 0-1 arasında sınırla.
     
     # ==================================================
     # RECALCULATE DEATH BENEFITS (ADJUSTED)
@@ -114,6 +116,7 @@ def calculate_bel(
         * projection["adjusted_qx"]
         * projection["sum_assured"]
     ).astype(np.float32)
+    # Adjusted death benefit = Survival Ratio × Adjusted qx × Sum Assured. Survival ratio, poliçenin hayatta kalma olasılığını temsil eder.
     
     # ==================================================
     # ADJUSTED NET CASH FLOW
@@ -126,11 +129,13 @@ def calculate_bel(
         - projection["Operating_Expenses"]
         - projection["Counterparty_Default_Cost"]
     ).astype(np.float32)
+    # Adjusted Net Cash Flow = Gross Premiums - Adjusted Death Benefits - Adjusted Surrender Benefits - Operating Expenses - Counterparty Default Cost
     
     projection["PV_Adjusted_Net_Cash_Flow"] = (
         projection["Adjusted_Net_Cash_Flow"]
         * projection["discount_factor"]
     ).astype(np.float32)
+    # PV Adjusted Net Cash Flow = Adjusted Net Cash Flow × Discount Factor. Discount factor, gelecekteki nakit akışlarının bugünkü değerini hesaplamak için kullanılır.
     
     # ==================================================
     # POLICY-LEVEL BEL AGGREGATION
@@ -147,11 +152,14 @@ def calculate_bel(
         })
         .rename(columns={"PV_Adjusted_Net_Cash_Flow": "bel_per_policy"})
     )
-    
+    # Policy bazında BEL'i hesapla: PV Adjusted Net Cash Flow'ların toplamı. Diğer bilgileri de ekle (sum assured, coverage years, issue age).
+
+
     # ==================================================
     # ONEROUS CONTRACT DETECTION
     # ==================================================
-    
+
+
     # Onerous: BEL < 0 (liability miktarı negatif)
     bel_result["is_onerous"] = bel_result["bel_per_policy"] < 0
     
@@ -165,27 +173,34 @@ def calculate_bel(
     onerous_count = bel_result["is_onerous"].sum()
     if onerous_count > 0:
         logger.warning(f"⚠️ {onerous_count} poliçe onerous (BEL < 0)")
-    
+    # Onerous poliçelerin sayısını logla. Onerous poliçe, BEL değeri negatif olan poliçedir ve bu durum finansal raporlama açısından önemlidir.
+
+
     total_bel = bel_result["bel_per_policy"].sum()
+    # Toplam BEL'i hesapla. Bu, tüm poliçelerin BEL'lerinin toplamıdır ve şirketin toplam yükümlülüğünü gösterir.
+
     avg_bel = bel_result["bel_per_policy"].mean()
-    
+    # Ortalama BEL'i hesapla. Bu, poliçe başına ortalama yükümlülüğü gösterir.
+
     logger.info(
         f"✓ BEL Hesaplandı: Total={total_bel:,.2f}, "
         f"Avg={avg_bel:,.2f}, Onerous={onerous_count}"
     )
-    
-    return bel_result
+    # Hesaplama tamamlandığında toplam BEL, ortalama BEL ve onerous poliçe sayısını logla.
+    return bel_result #Policy bazında BEL sonuçlarını içeren DataFrame'i döndür. Her satır bir poliçeyi temsil eder ve bel_per_policy sütunu o poliçenin BEL değerini içerir.
 
 
 # ==================================================
 # BEL SENSITIVITY ANALYSIS
 # ==================================================
 
+# BEL'in duyarlılık analizi (mortalite, lapse, discount rate şokları).
 def calculate_bel_sensitivity(
     projection: pd.DataFrame,
     config: ModelConfig,
     shock_scenarios: Optional[dict] = None
 ) -> pd.DataFrame:
+    
     """
     BEL'in duyarlılık analizi (mortalite, lapse, discount rate şokları).
     
@@ -204,6 +219,7 @@ def calculate_bel_sensitivity(
         pd.DataFrame: Senaryo bazında BEL değerleri
     """
     
+    # Default şok senaryoları
     if shock_scenarios is None:
         shock_scenarios = {
             "base": {"mort_shock": 0, "lapse_shock": 0, "rate_shock": 0},
@@ -212,30 +228,39 @@ def calculate_bel_sensitivity(
             "rate_down_100bps": {"mort_shock": 0, "lapse_shock": 0, "rate_shock": -0.01},
         }
     
-    sensitivity_results = []
+    sensitivity_results = [] #Her senaryo için BEL sonuçlarını depolamak için boş bir liste oluşturulur.
     
+    # Her senaryo için BEL'i hesapla
     for scenario_name, shocks in shock_scenarios.items():
         proj_shock = projection.copy()
         
-        # Apply shocks
+        #Mortalite ve lapse şoklarını uygula
         proj_shock["adjusted_qx"] = (
             proj_shock["qx"]
             * (1 + shocks["mort_shock"])
         ).clip(0, 1)
         
+        #Lapse şokunu uygula
         proj_shock["shocked_lapse_rate"] = (
             proj_shock["lapse_rate"]
             + shocks["lapse_shock"]
         ).clip(0, 1)
         
-        # Recalculate BEL
+        # BEL hesaplaması için discount rate şokunu uygula
+        proj_shock["shocked_discount_rate"] = (
+            proj_shock["discount_rate"]
+            + shocks["rate_shock"]
+        ).clip(0, 1)
+        proj_shock["discount_factor"] = 1 / (1 + proj_shock["shocked_discount_rate"]) ** proj_shock["Year"]
         bel_shock = calculate_bel(proj_shock, config)
         bel_shock["scenario"] = scenario_name
         
         sensitivity_results.append(bel_shock)
     
+    # Tüm senaryo sonuçlarını birleştir
     sensitivity_df = pd.concat(sensitivity_results, ignore_index=True)
     
+    # Loglama
     logger.info(f"✓ Sensitivity analysis tamamlandı: {len(shock_scenarios)} senaryo")
     
-    return sensitivity_df
+    return sensitivity_df #Senaryo bazında BEL sonuçlarını içeren DataFrame'i döndür.

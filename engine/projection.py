@@ -1,7 +1,7 @@
 # engine/projection.py
 
-from typing import Optional
-import sys
+from typing import Optional 
+import sys 
 from pathlib import Path
 from functools import lru_cache
 import logging
@@ -13,7 +13,8 @@ import numpy as np
 import pandas as pd
 
 from model.config_model import ModelConfig
-from engine.curves import get_exponential_lapse
+from engine.curves import get_exponential_lapse 
+#Üstel ayrılma eğrisini içeri aktarma
 
 logger = logging.getLogger(__name__)
 

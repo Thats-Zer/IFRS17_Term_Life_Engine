@@ -1,0 +1,29 @@
+Starting Note: I have rewrite this project,again and again,
+I have thought again and again. so, if there's a mistake please notify me.
+
+The Logic Behind These Codes and IFRS17 Standart
+ 
+let's naming our projection period as t and the number of insurance policies at our portfolio as n;
+We need to calculate some values per year by per policy.
+So, it means if we had 10 year period and 10000 policies at or portfolio,
+we need to calculate 10*10000=100000  individual values per column. 
+In these kind of situations, using matrix calc. is one of the easiest ways.
+
+let's start to intoduce this project...
+
+=>>>>>>>>> Policy Projection Structure
+
+Every single policy in our portfolio is projected by year by year from 0 point to our final point or with the it's other name, t.
+And for this individual  projections the engine calculates;
+>Survival Probability
+>Mortality Probability
+>Lapse Probability
+>Premium
+>Claim
+>Expenses
+>Discounting
+>BEL
+> Risk Adjusment
+>CSM Movements
+
+Pro

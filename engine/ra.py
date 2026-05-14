@@ -155,6 +155,7 @@ def calculate_risk_adjustment(
 # RISK DECOMPOSITION
 # ==================================================
 
+# Risk Adjustment'ı risk bileşenlerine ayır.
 def decompose_risk_adjustment(
     projection: pd.DataFrame,
     config: ModelConfig
@@ -165,7 +166,7 @@ def decompose_risk_adjustment(
     Returns:
         pd.DataFrame: Mortality, lapse, expense, counterparty risk ayrı ayrı
     """
-    
+    # Öncelikle toplam risk ayarlamasını hesapla
     ra_full = calculate_risk_adjustment(projection, config)
     
     # Daha detaylı breakdown (basitleştirilmiş)

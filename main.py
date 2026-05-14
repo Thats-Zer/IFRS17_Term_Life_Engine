@@ -5,7 +5,7 @@ from typing import Optional # <-- Optional tipi, fonksiyon imzalarında kullanı
 
 import pandas as pd # <-- pandas, veri işleme için gerekli
 
-from engine.asumptions import loadconfig # <-- Config yönetimi için gerekli
+from engine.assumptions import loadconfig # <-- Config yönetimi için gerekli
 from engine.curves import create_discount_curve # <-- Discount curve oluşturma için gerekli
 from engine.projection import ( 
     create_master_data, # <-- Master data oluşturma için gerekli

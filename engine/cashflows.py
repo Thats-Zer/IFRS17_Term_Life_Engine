@@ -546,7 +546,7 @@ def test_cashflows() -> None:
     from pathlib import Path
     sys.path.insert(0, str(Path(__file__).parent.parent))
     
-    from engine.asumptions import loadconfig
+    from engine.assumptions import loadconfig
     from engine.curves import create_discount_curve
     from engine.projection import (
         create_master_data,
