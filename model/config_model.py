@@ -142,6 +142,33 @@ class ConfigModel(BaseModel):
         description="Reporting year used for single-period CSM rollforward release",
     )
 
+    issue_year: int = Field(
+        default=2026,
+        gt=1900,
+        description="Default synthetic issue year used for annual cohort grouping",
+    )
+
+    portfolio_id: str = Field(
+        default="TERM_LIFE",
+        description="Default IFRS 17 portfolio identifier",
+    )
+
+    methodology_version: str = Field(
+        default="ifrs17-term-life-educational-v1",
+        description="Methodology version recorded in audit outputs",
+    )
+
+    approval_status: str = Field(
+        default="development",
+        description="Governance status recorded in audit outputs",
+    )
+
+    locked_in_discount_rate: float | None = Field(
+        default=None,
+        ge=0,
+        description="Optional locked-in rate for disclosure and governance tracking",
+    )
+
     ra_mortality_sigma: float = Field(
         default=0.10,
         ge=0,

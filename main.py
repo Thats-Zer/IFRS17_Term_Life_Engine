@@ -303,6 +303,7 @@ def main() -> None:
                 excel_output=bool(config.excel_output),
                 excel_path=config.output_path,
                 group_result=group_result,
+                config=config,
             )
         except Exception as e:
             handle_error("OUTPUTS", e)

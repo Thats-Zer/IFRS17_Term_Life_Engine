@@ -198,6 +198,8 @@ def create_master_data(config: ModelConfig) -> pd.DataFrame:
         ).astype(np.float32)
         ,
         "coverage_years": np.full(config.n_policies, int(getattr(config, "coverage_years", config.projection_years)), dtype=np.int16),
+        "issue_year": np.full(config.n_policies, int(getattr(config, "issue_year", 2026)), dtype=np.int16),
+        "portfolio_id": np.full(config.n_policies, str(getattr(config, "portfolio_id", "TERM_LIFE"))),
     })
     
     logger.info(f"✓ Master data oluşturuldu: {len(master_data)} poliçe")
@@ -238,7 +240,7 @@ def create_year_age_grid(
     
     # issue_age + coverage_years merge et
     grid = grid.merge(
-        master_data[["policy_id", "issue_age", "coverage_years"]],
+        master_data[["policy_id", "issue_age", "coverage_years", "issue_year", "portfolio_id"]],
         on="policy_id",
         how="left"
     )
@@ -255,6 +257,7 @@ def create_year_age_grid(
         "current_age": np.int16,
         "issue_age": np.int16,
         "coverage_years": np.int16,
+        "issue_year": np.int16,
     })
 
     # in_force: coverage döneminde mi?
