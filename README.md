@@ -37,6 +37,7 @@ Detailed formula documentation is available in:
 
 - `Formulas/To_Inform.txt`
 - `Formulas/Bilgilendirme.txt`
+- `docs/ACTUARIAL_METHODOLOGY_VALIDATION_REPORT.md`
 
 ## Repository Structure
 

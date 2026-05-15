@@ -37,6 +37,7 @@ Detaylı formül dokümantasyonu:
 
 - `Formulas/To_Inform.txt`
 - `Formulas/Bilgilendirme.txt`
+- `docs/ACTUARIAL_METHODOLOGY_VALIDATION_REPORT.md`
 
 ## Proje Yapısı
 
