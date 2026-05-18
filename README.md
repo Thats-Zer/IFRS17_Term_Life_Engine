@@ -20,6 +20,11 @@ This project is designed to show actuarial modelling, Python engineering, and IF
 - Writes CSV, Excel, audit report, assumption snapshot, and run registry outputs.
 - Includes automated tests for calculation identities and actuarial invariants.
 
+## Description
+
+**IFRS 17 Term Life Valuation Engine**  
+Built a modular Python engine for term-life insurance valuation under simplified IFRS 17 logic, including policy-level projection, mortality/lapse modelling, cashflow generation, BEL, stochastic Risk Adjustment, CSM roll-forward, onerous contract testing, IFRS 17-style grouping, scenario analysis, audit snapshots, and automated validation tests.
+
 ## Actuarial Logic
 
 The engine uses the following simplified measurement structure:
