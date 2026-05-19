@@ -132,11 +132,6 @@ The test suite includes:
 - grouping checks
 - audit snapshot and run registry checks
 
-## Example CV Description
-
-**IFRS 17 Term Life Valuation Engine**  
-Built a modular Python engine for term-life insurance valuation under simplified IFRS 17 logic, including policy-level projection, mortality/lapse modelling, cashflow generation, BEL, stochastic Risk Adjustment, CSM roll-forward, onerous contract testing, IFRS 17-style grouping, scenario analysis, audit snapshots, and automated validation tests.
-
 ## Tech Stack
 
 - Python 3.11+
