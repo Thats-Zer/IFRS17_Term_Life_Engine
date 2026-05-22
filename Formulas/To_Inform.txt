@@ -83,6 +83,61 @@ product of survival multipliers from years 1 to t-1
 Therefore, Year 1 has survival_ratio = 1.
 
 
+In-force formula:
+
+in_force(t)
+=
+Year(t) <= coverage_years
+
+This formula is a 0/1 coverage indicator showing whether the policy is
+within its contractual coverage period in the projection year.
+
+Example:
+
+coverage_years = 10
+
+Year 1  -> in_force = True
+Year 2  -> in_force = True
+...
+Year 10 -> in_force = True
+Year 11 -> in_force = False
+
+For a 10-year term-life policy, coverage exists through Year 10. From
+Year 11 onward, the policy is outside the coverage period.
+
+In the code, this variable is usually used as a 1/0 multiplier:
+
+Death_Benefits(t)
+=
+in_force(t) * survival_ratio(t) * adjusted_qx(t) * sum_assured
+
+This prevents death benefits from being produced after the coverage term
+has expired. For example, if Year 11 has in_force = 0:
+
+Death_Benefits(t)
+=
+0 * survival_ratio(t) * adjusted_qx(t) * sum_assured
+=
+0
+
+The same logic can be used in premium, expense and CSM coverage-unit
+calculations, preventing the model from producing cashflows or service
+units after the policy term has ended.
+
+Note: in_force only checks whether the policy is inside the contractual
+coverage period. Mortality, lapse and within-year continuation effects are
+reflected separately through survival_ratio, lapse_rate, adjusted_qx or
+the relevant stochastic indicators.
+
+Summary:
+
+in_force      = term/coverage-period control
+survival_ratio = expected in-force proportion at the start of the year
+adjusted_qx   = adjusted mortality probability for the year
+lapse_rate    = lapse probability for the year
+sum_assured   = policy-specific benefit amount
+
+
 ===========================================================
 3) PREMIUM AND CASHFLOW LOGIC
 ===========================================================

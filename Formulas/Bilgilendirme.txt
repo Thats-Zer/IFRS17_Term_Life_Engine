@@ -82,6 +82,61 @@ survival_ratio(t)
 Bu nedenle Year 1 icin survival_ratio = 1.
 
 
+In-force formulu:
+
+in_force(t)
+=
+Year(t) <= coverage_years
+
+Bu formul, policenin ilgili projeksiyon yilinda teminat suresi icinde
+olup olmadigini belirleyen 0/1 kapsam gostergesidir.
+
+Ornek:
+
+coverage_years = 10
+
+Year 1  -> in_force = True
+Year 2  -> in_force = True
+...
+Year 10 -> in_force = True
+Year 11 -> in_force = False
+
+Yani 10 yillik term-life policede 10. yil dahil teminat vardir;
+11. yildan itibaren police teminat kapsami disina cikar.
+
+Kodda bu degisken genellikle 1/0 carpani olarak kullanilir:
+
+Death_Benefits(t)
+=
+in_force(t) * survival_ratio(t) * adjusted_qx(t) * sum_assured
+
+Bu yapi sayesinde police vadesi bittikten sonra olum gerceklesse bile
+olum tazminati olusmaz. Ornegin Year 11 icin in_force = 0 ise:
+
+Death_Benefits(t)
+=
+0 * survival_ratio(t) * adjusted_qx(t) * sum_assured
+=
+0
+
+Ayni mantik prim, gider ve CSM coverage unit hesaplarinda da kullanilir.
+Boylece police suresi bittikten sonra modelin nakit akisi veya hizmet
+birimi uretmesi engellenir.
+
+Not: in_force yalnizca policenin teminat suresi icinde olup olmadigini
+kontrol eder. Olum, lapse ve yil ici devam etkileri ayrica
+survival_ratio, lapse_rate, adjusted_qx veya ilgili stokastik gostergelerle
+modele yansitilir.
+
+Ozet:
+
+in_force      = vade/kapsam kontrolu
+survival_ratio = yil basina kadar beklenen yururlukte kalma orani
+adjusted_qx   = o yildaki duzeltilmis olum olasiligi
+lapse_rate    = o yildaki ayrilma orani
+sum_assured   = police ozelindeki teminat tutari
+
+
 ===========================================================
 3) PRIM VE NAKIT AKISI MANTIGI
 ===========================================================

@@ -14,7 +14,7 @@ from engine.projection import create_master_data, create_projection_table, load_
 from engine.ra import calculate_risk_adjustment
 from engine.scenarios import run_scenarios
 
-
+# Configure console encoding to UTF-8 if possible
 def _configure_console_encoding() -> None:
     for stream_name in ("stdout", "stderr"):
         stream = getattr(sys, stream_name, None)
@@ -24,6 +24,7 @@ def _configure_console_encoding() -> None:
 
 _configure_console_encoding()
 
+# Set up logging to both console and file with UTF-8 encoding
 logging.basicConfig(
     level=logging.INFO,
     format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
@@ -35,7 +36,7 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-
+# Custom exception class for engine errors
 class EngineException(Exception):
     def __init__(
         self,
@@ -53,7 +54,7 @@ class EngineException(Exception):
             return f"[{self.step}] {super().__str__()}"
         return super().__str__()
 
-
+# Centralized error handling function
 def handle_error(step_name: str, error: Exception) -> None:
     logger.error(
         "Step %s failed: %s: %s",
@@ -63,7 +64,7 @@ def handle_error(step_name: str, error: Exception) -> None:
         exc_info=True,
     )
 
-
+# Validate config values to catch common issues early
 def validate_config(config) -> bool:
     if config.n_policies <= 0:
         raise ValueError("n_policies must be greater than 0")
@@ -75,7 +76,7 @@ def validate_config(config) -> bool:
     logger.info("Config validated")
     return True
 
-
+# Main function to run the engine
 def main() -> None:
     success = False
     try:

@@ -25,14 +25,17 @@ def calculate_initial_csm(
     IFRS17 Başlangıç Contractual Service Margin (CSM) hesapla.
     
     CSM Tanımı:
-    CSM = PV(Premiums) - (BEL + RA)
+    Bu engine'de BEL "liability-positive" ve prim girişleriyle netlenmiş
+    olarak hesaplanır:
+        BEL = PV(Outflows) - PV(Inflows)
 
-    Not:
-    - Bu engine'de BEL "liability-positive" kabul edilir (outflows - inflows).
+    Bu nedenle başlangıç CSM formülü primleri tekrar düşmez:
+        Initial CSM = max(-(BEL + RA), 0)
+        Onerous Loss = max(BEL + RA, 0)
     
     Onerous Kontrat Kontrolü:
-    - Eğer (BEL + RA) > PV(Premiums) ise: CSM = 0, Onerous Loss kaydedilir
-    - Aksi takdirde: Normal CSM
+    - Eğer (BEL + RA) > 0 ise: CSM = 0, Onerous Loss kaydedilir
+    - Eğer (BEL + RA) < 0 ise: kârlı kontrat/grup için pozitif CSM oluşur
     
     CSM Negatif Olabilir mi?
     - Hayır, IFRS17'de CSM >= 0
