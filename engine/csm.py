@@ -59,7 +59,8 @@ def calculate_initial_csm(
     
     # Unutulmuş: projection'dan PV(Premiums) alınması gerekir
     # Öncelik: projection içinden poliçe bazında PV primleri topla.
-    # Fallback: (eski davranış) PV premiums ≈ BEL × (1 + premium_margin)
+    # Fallback eski davranış kaldırıldı: BEL zaten primleri netlediği için
+    # PV premiums sadece raporlama amaçlı projection'dan okunur.
 
     # projection'da PV primleri yoksa, bel_result üzerinden tahmini PV primleri hesapla
     if "pv_premiums" not in bel_result.columns:
@@ -114,8 +115,9 @@ def calculate_initial_csm(
                 elif "discount_factor" in proj.columns:
                     pv_death_col = "PV_Death_Benefits"
                     proj = proj.copy()
+                    qx_col = "adjusted_qx" if "adjusted_qx" in proj.columns else "qx"
                     proj["Death_Benefits"] = (
-                        proj["survival_ratio"] * proj["qx"] * proj["sum_assured"]
+                        proj["survival_ratio"] * proj[qx_col] * proj["sum_assured"]
                     ).astype(float_dtype)
                     proj[pv_death_col] = (proj["Death_Benefits"] * proj["discount_factor"]).astype(float_dtype)
                 else:
@@ -324,22 +326,13 @@ def calculate_finance_cost(
     prior_year_rate: Optional[float] = None
 ) -> pd.DataFrame:
     """
-    Finance Cost (Faiz Maliyeti) hesapla.
-    
-    IFRS17 Finance Cost:
-    Finance Cost = Opening_Liability × (Curve_Rate - Prior_Year_Rate)
-    
-    Opening Liability:
-    = Opening BEL + Opening RA + Opening CSM
-    
-    Rate Change:
-    - Yield curve'ün tenor-specific tarafından
-    - Prior year'ın başında kullanılan rate
-    - Current year'ın başında kullanılan rate
-    
+    CSM accretion interest hesapla.
+
+    Bu fonksiyon toplam insurance finance expense değil, yalnızca CSM üzerine
+    locked-in/current flat rate ile faiz işletme adımını üretir.
+
     Formula:
-    FC = (BEL_opening + RA_opening + CSM_opening)
-       × [Discount_Rate(Year) - Discount_Rate(Year-1)]
+    CSM_Finance_Cost = CSM_Opening × accretion_rate
     
     Args:
         opening_liability: Opening balance (BEL, RA, CSM)
@@ -355,7 +348,7 @@ def calculate_finance_cost(
     accretion_rate = float(prior_year_rate if prior_year_rate is not None else config.discount_rate)
     
     # ==================================================
-    # FINANCE COST = LIABILITY × RATE CHANGE
+    # FINANCE COST = CSM × ACCRETION RATE
     # ==================================================
     
     opening_liability["finance_cost"] = (

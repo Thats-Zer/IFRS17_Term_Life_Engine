@@ -55,18 +55,10 @@ def test_bel_reconciles_to_adjusted_liability_cashflows(config_small, mortality_
     re_rate = float(getattr(config_small, "reinsurance_cost_rate", 0.0) or 0.0)
     pd_default = float(getattr(config_small, "counterparty_pd", 0.0) or 0.0)
     lgd = float(getattr(config_small, "counterparty_lgd", 0.0) or 0.0)
-    corr = float(getattr(config_small, "lapse_mortality_correlation", 0.1) or 0.0)
     in_force = (projection["Year"] <= projection["coverage_years"]).astype(float)
 
-    adjusted_qx = (projection["qx"] * (1 - corr * projection["lapse_rate"])).clip(0, 1)
-    adjusted_claims = in_force * projection["survival_ratio"] * adjusted_qx * projection["sum_assured"]
+    adjusted_claims = in_force * projection["survival_ratio"] * projection["adjusted_qx"] * projection["sum_assured"]
     adjusted_surrender = projection["Surrender_Benefit"].copy()
-    adjusted_surrender.loc[projection["Year"] == 1] = 0.0
-    adjusted_surrender.loc[projection["Year"] == 2] = projection.loc[
-        projection["Year"] == 2,
-        "net_annual_premium",
-    ] * 0.5
-    adjusted_surrender.loc[projection["Year"] >= projection["coverage_years"]] = 0.0
     re_ceding = projection["Gross_Premium_Inflow"] * re_rate
     re_recovery = adjusted_claims * re_rate
     default_cost = re_recovery * pd_default * lgd

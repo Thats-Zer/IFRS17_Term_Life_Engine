@@ -183,6 +183,9 @@ def create_master_data(config: ModelConfig) -> pd.DataFrame:
     """
     np.random.seed(config.random_seed)
     
+    sum_assured_sigma = float(getattr(config, "sum_assured_sigma", 0.8) or 0.0)
+    sum_assured_mu = np.log(config.target_avg_sum_assured) - 0.5 * (sum_assured_sigma ** 2)
+
     master_data = pd.DataFrame({
         "policy_id": np.arange(1, config.n_policies + 1, dtype=np.int32),
         "issue_age": np.random.randint(
@@ -192,8 +195,8 @@ def create_master_data(config: ModelConfig) -> pd.DataFrame:
             dtype=np.int16
         ),
         "sum_assured": np.random.lognormal(
-            mean=np.log(config.target_avg_sum_assured),
-            sigma=0.8,
+            mean=sum_assured_mu,
+            sigma=sum_assured_sigma,
             size=config.n_policies
         ).astype(np.float32)
         ,

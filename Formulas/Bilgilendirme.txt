@@ -96,14 +96,14 @@ Olum tazminati:
 
 Death_Benefits(t)
 =
-in_force(t) * survival_ratio(t) * qx(t) * sum_assured
+in_force(t) * survival_ratio(t) * adjusted_qx(t) * sum_assured
 
 Surrender benefit:
 
 Surrender_Benefit(t)
 =
 in_force(t) * survival_ratio(t) * lapse_rate(t)
-* max(net_annual_premium - surrender_charge(t), 0)
+* max(net_annual_premium * surrender_value_rate - surrender_charge(t), 0)
 
 Operasyonel gider:
 
@@ -206,7 +206,7 @@ Yorum:
 > BEL > 0 net yukumluluk anlamina gelir.
 > BEL < 0 net varlik pozisyonu anlamina gelir.
 
-BEL icinde ayarlanmis mortalite ve surrender varsayimlari kullanilir:
+Cashflow ve BEL ayni ayarlanmis mortalite basis'ini kullanir:
 
 Adjusted_qx(t)
 =

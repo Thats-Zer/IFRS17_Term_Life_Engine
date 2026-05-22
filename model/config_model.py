@@ -12,26 +12,32 @@ class ConfigModel(BaseModel):
     random_seed: int = Field(default=42, description="Random seed for reproducible synthetic data")
 
     target_avg_sum_assured: float = Field(default=50000, gt=0)
+    sum_assured_sigma: float = Field(default=0.8, ge=0)
     min_issue_age: int = Field(default=18, ge=0)
     max_issue_age: int = Field(default=55, ge=0)
 
     discount_rate: float = Field(default=0.05, ge=0)
     tax_rate: float = Field(default=0.20, ge=0, le=1)
-    premium_margin: float = Field(default=1.2, gt=0)
+    premium_margin: float = Field(
+        default=1.2,
+        gt=0,
+        description="Legacy gross/net premium multiplier; used only when profit_margin is not supplied",
+    )
 
     inflation_rate: float = Field(default=0.05, ge=0)
-    unit_cost: float = Field(default=1000.0, gt=0)
+    unit_cost: float = Field(default=1000.0, gt=0, description="Legacy field retained for old configs")
 
     base_mort_rate: float = Field(default=0.001, gt=0)
     mortality_age_factor: float = Field(default=0.0001, gt=0)
     mortality_shock: float = Field(default=0.0005, ge=0)
+    lapse_mortality_correlation: float = Field(default=0.1, ge=0, le=1)
 
     lapse_decay: float = Field(default=0.15, ge=0)
     lapse_base_rate: float = Field(default=0.10, ge=0)
 
     coc_ratio: float = Field(default=0.05, ge=0, le=1)
-    s2_margin: float = Field(default=0.25, gt=0)
-    op_risk_ratio: float = Field(default=0.02, gt=0)
+    s2_margin: float = Field(default=0.25, gt=0, description="Legacy field retained for old configs")
+    op_risk_ratio: float = Field(default=0.02, gt=0, description="Legacy field retained for old configs")
 
     reinsurance_cost: float = Field(default=0.4, gt=0)
     counterparty_pd: float = Field(default=0.005, ge=0, le=1)
@@ -71,6 +77,12 @@ class ConfigModel(BaseModel):
     collection_cost_rate: float = Field(default=0.02, ge=0, le=1)
     maintenance_cost_per_policy: float = Field(default=50.0, ge=0)
     reinsurance_cost_rate: float = Field(default=0.4, ge=0)
+    surrender_value_rate: float = Field(
+        default=0.0,
+        ge=0,
+        le=1,
+        description="Term-life cash surrender value as a share of annual net premium",
+    )
     surrender_charge_rate: float = Field(default=0.1, ge=0, le=1)
     profit_margin: float = Field(default=0.2, ge=0, le=1)
     contingency_loading: float = Field(default=0.05, ge=0, le=1)
@@ -95,6 +107,8 @@ class ConfigModel(BaseModel):
     @model_validator(mode="after")
     def _backward_compat_reinsurance_rate(self):
         fields_set = getattr(self, "model_fields_set", set())
+        if "profit_margin" not in fields_set and "premium_margin" in fields_set:
+            self.profit_margin = max(float(self.premium_margin) - 1.0, 0.0)
         if "reinsurance_cost_rate" not in fields_set and "reinsurance_cost" in fields_set:
             self.reinsurance_cost_rate = self.reinsurance_cost
         return self

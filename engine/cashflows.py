@@ -113,10 +113,10 @@ def calculate_surrender_charges(
     """
     Poliçe iptali durumunda fesih giderlerini hesapla.
     
-    Surrender Charge Mantığı:
-    - Poliçe başında yüksek (ilk yıllarda)
-    - Zamanla azalır (linearly veya exponentially)
-    - Coverage dönemi sonunda sıfır
+    Term-life surrender convention:
+    - Default cash surrender value is zero via `surrender_value_rate = 0`.
+    - If a non-zero surrender value is configured, surrender charges are applied
+      against that value rather than against sum assured.
     
     Formula (Linear Decline):
     Surrender_Charge_t = max(0, Surrender_Base × (1 - t / Coverage_Years))
@@ -155,9 +155,16 @@ def calculate_surrender_charges(
     # Linear decline: max(0, 1 - year_ratio)
     surrender_multiplier = np.maximum(0, 1 - year_ratio).astype(np.float32)
     
-    # Surrender charge (Sum Assured'ın yüzdesi olarak)
+    surrender_value_rate = float(getattr(config, "surrender_value_rate", 0.0) or 0.0)
+
+    # Surrender charge (annual net premium surrender value base)
+    if "net_annual_premium" in projection.columns:
+        surrender_base = projection["net_annual_premium"] * surrender_value_rate
+    else:
+        surrender_base = 0.0
+
     projection["surrender_charge"] = (
-        projection["sum_assured"]
+        surrender_base
         * config.surrender_charge_rate
         * surrender_multiplier
     ).astype(np.float32)
@@ -169,7 +176,7 @@ def calculate_surrender_charges(
     #     * np.exp(-0.3 * projection["Year"])
     # ).clip(lower=0)
     
-    logger.debug("✓ Fesih giderleri hesaplandı (linear decline)")
+    logger.debug("✓ Surrender charges calculated (term-life value base)")
     
     return projection
 
@@ -431,10 +438,16 @@ def calculate_cashflows(
     # OUTFLOWS - DEATH BENEFITS
     # ==================================================
     
+    lapse_mortality_correlation = float(getattr(config, "lapse_mortality_correlation", 0.1) or 0.0)
+    projection["adjusted_qx"] = (
+        projection["qx"]
+        * (1 - lapse_mortality_correlation * projection["lapse_rate"])
+    ).clip(0, 1).astype(np.float32)
+
     projection["Death_Benefits"] = (
         in_force
         * projection["survival_ratio"]
-        * projection["qx"]
+        * projection["adjusted_qx"]
         * projection["sum_assured"]
     ).astype(np.float32)
     
@@ -442,15 +455,18 @@ def calculate_cashflows(
     # OUTFLOWS - SURRENDER BENEFITS
     # ==================================================
     
-    # İptal halinde (basitleştirilmiş): surrender value ≈ o yılın net yıllık primi
+    # Term-life default: no cash surrender value unless explicitly configured.
     if "surrender_charge" not in projection.columns:
         projection = calculate_surrender_charges(projection, config)
+
+    surrender_value_rate = float(getattr(config, "surrender_value_rate", 0.0) or 0.0)
+    surrender_value = (projection["net_annual_premium"] * surrender_value_rate).astype(np.float32)
     
     projection["Surrender_Benefit"] = (
         in_force
         * projection["survival_ratio"]
         * projection["lapse_rate"]
-        * (projection["net_annual_premium"] - projection["surrender_charge"])
+        * (surrender_value - projection["surrender_charge"])
     ).clip(lower=0).astype(np.float32)
     
     # ==================================================

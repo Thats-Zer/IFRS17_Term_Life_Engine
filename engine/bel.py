@@ -84,41 +84,7 @@ def calculate_bel(
 
     float_dtype = np.float64 if bool(getattr(config, "use_float64", False)) else np.float32
     
-    # ==================================================
-    # EARLY SURRENDER ADJUSTMENT
-    # ==================================================
-    
-    # Yıl 1-2'de surrender value negatif olabilir (acquisition cost recovery)
-    
-    projection["adjusted_surrender_benefit"] = projection["Surrender_Benefit"].copy()
-    # İlk 2 yıl için surrender benefit'i düzelt (acquisition cost recovery etkisi)
-    
-    # Yıl 1: Surrender benefit = 0 (minimum cash value)
-    projection.loc[projection["Year"] == 1, "adjusted_surrender_benefit"] = 0
-    
-    # Yıl 2: Partial surrender value (basitleştirme)
-    projection.loc[
-        projection["Year"] == 2,
-        "adjusted_surrender_benefit"
-    ] = (
-        (
-            projection.loc[projection["Year"] == 2, "net_annual_premium"]
-            if "net_annual_premium" in projection.columns
-            else projection.loc[projection["Year"] == 2, "Gross_Premium_Inflow"]
-        )
-        * 0.5
-    )
-    
-    # ==================================================
-    # MATURITY ADJUSTMENT
-    # ==================================================
-
-    # Son yıl: poliçe olgunlaştı, surrender value = 0
-    
-    if "coverage_years" in projection.columns:
-        last_year_mask = projection["Year"] >= projection["coverage_years"]
-        projection.loc[last_year_mask, "adjusted_surrender_benefit"] = 0
-    # Eğer coverage_years bilgisi varsa, son yıl ve sonrası için surrender benefit'i 0 yap.
+    projection["adjusted_surrender_benefit"] = projection["Surrender_Benefit"].astype(float_dtype)
     
     # ==================================================
     # LAPSE & MORTALITY CORRECTION
@@ -130,10 +96,13 @@ def calculate_bel(
     
     lapse_mortality_correlation = getattr(config, "lapse_mortality_correlation", 0.1)
     
-    projection["adjusted_qx"] = (
-        projection["qx"]
-        * (1 - lapse_mortality_correlation * projection["lapse_rate"])
-    ).clip(0, 1).astype(float_dtype)
+    if "adjusted_qx" not in projection.columns:
+        projection["adjusted_qx"] = (
+            projection["qx"]
+            * (1 - lapse_mortality_correlation * projection["lapse_rate"])
+        ).clip(0, 1).astype(float_dtype)
+    else:
+        projection["adjusted_qx"] = projection["adjusted_qx"].astype(float_dtype)
     # Lapse oranı arttıkça, adjusted_qx azalır (selection effect). Clip ile 0-1 arasında sınırla.
     
     # ==================================================

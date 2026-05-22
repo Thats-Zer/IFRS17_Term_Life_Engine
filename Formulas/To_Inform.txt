@@ -97,14 +97,14 @@ Death benefits:
 
 Death_Benefits(t)
 =
-in_force(t) * survival_ratio(t) * qx(t) * sum_assured
+in_force(t) * survival_ratio(t) * adjusted_qx(t) * sum_assured
 
 Surrender benefits:
 
 Surrender_Benefit(t)
 =
 in_force(t) * survival_ratio(t) * lapse_rate(t)
-* max(net_annual_premium - surrender_charge(t), 0)
+* max(net_annual_premium * surrender_value_rate - surrender_charge(t), 0)
 
 Operating expenses:
 
@@ -207,7 +207,7 @@ Interpretation:
 > BEL > 0 means a net liability.
 > BEL < 0 means a net asset position.
 
-BEL includes adjusted mortality and surrender assumptions:
+Cashflows and BEL use the same adjusted mortality basis:
 
 Adjusted_qx(t)
 =

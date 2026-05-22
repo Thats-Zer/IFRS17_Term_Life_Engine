@@ -27,7 +27,7 @@ The model represents a simplified term-life product with the following features:
 - premium inflows
 - death benefit outflows
 - operating expense outflows
-- simplified surrender benefit logic
+- term-life surrender benefit logic, defaulting to zero cash surrender value
 - simplified reinsurance ceding and recovery
 - simplified counterparty default cost
 
@@ -125,13 +125,13 @@ Interpretation:
 - positive BEL means net liability
 - negative BEL means net asset
 
-The BEL calculation includes adjusted mortality:
+Cashflows and BEL use the same adjusted mortality basis:
 
 ```text
 adjusted_qx = qx * (1 - lapse_mortality_correlation * lapse_rate)
 ```
 
-This is a simplified selection-effect adjustment and should not be interpreted as a calibrated production assumption.
+Death benefits, reinsurance recoveries, BEL, RA, and CSM diagnostics use this same adjusted death-benefit basis. The adjustment is a simplified selection-effect assumption and should not be interpreted as calibrated production behaviour.
 
 ## 8. Risk Adjustment Methodology
 

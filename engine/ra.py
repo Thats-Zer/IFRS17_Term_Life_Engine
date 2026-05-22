@@ -15,20 +15,6 @@ def _prepare_adjusted_surrender(projection: pd.DataFrame) -> pd.DataFrame:
         return projection
 
     projection["adjusted_surrender_benefit"] = projection["Surrender_Benefit"].astype(np.float32)
-    projection.loc[projection["Year"] == 1, "adjusted_surrender_benefit"] = 0.0
-
-    if "net_annual_premium" in projection.columns:
-        projection.loc[
-            projection["Year"] == 2,
-            "adjusted_surrender_benefit",
-        ] = projection.loc[projection["Year"] == 2, "net_annual_premium"] * 0.5
-
-    if "coverage_years" in projection.columns:
-        projection.loc[
-            projection["Year"] >= projection["coverage_years"],
-            "adjusted_surrender_benefit",
-        ] = 0.0
-
     return projection
 
 
