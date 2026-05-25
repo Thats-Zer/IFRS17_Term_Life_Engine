@@ -1,0 +1,58 @@
+{
+  "approval_status": "draft",
+  "assumption_hash": "ace42796bf5412baff06fb011a83d20d17b22d5f29778d82840e1982f47c6306",
+  "assumptions": {
+    "approval_status": "draft",
+    "enable_bel_diagnostics": false,
+    "locked_in_discount_rate": 0.03,
+    "methodology_version": "test",
+    "mortality_table_path": "data/mortality_table.csv",
+    "output_path": "outputs/test_diag_disabled2"
+  },
+  "bel_diagnostics": null,
+  "created_at_utc": "2026-05-25T21:07:03.984553+00:00",
+  "data_lineage": {
+    "config_path": "config/config.json",
+    "mortality_table_path": "data/mortality_table.csv",
+    "output_path": "outputs/test_diag_disabled2"
+  },
+  "locked_in_discount_rate": 0.03,
+  "methodology_version": "test",
+  "reconciliation_totals": {
+    "total_bel": 5.0,
+    "total_csm_closing": 0.0,
+    "total_csm_opening": 0.0,
+    "total_ra": 3.0
+  },
+  "row_counts": {
+    "bel": {
+      "columns": 11,
+      "rows": 2
+    },
+    "csm": {
+      "columns": 3,
+      "rows": 2
+    },
+    "groups": {
+      "columns": 0,
+      "rows": 0
+    },
+    "master": {
+      "columns": 1,
+      "rows": 2
+    },
+    "projection": {
+      "columns": 2,
+      "rows": 2
+    },
+    "ra": {
+      "columns": 2,
+      "rows": 2
+    },
+    "scenarios": {
+      "columns": 0,
+      "rows": 0
+    }
+  },
+  "run_id": "29783e3ed54341389534e56cc6a03541"
+}

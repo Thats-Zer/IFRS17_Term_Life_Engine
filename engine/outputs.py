@@ -9,6 +9,7 @@ from uuid import uuid4
 import pandas as pd
 
 from engine.audit import build_audit_report, config_snapshot
+from engine.bel import get_last_bel_diagnostic_summary
 
 logger = logging.getLogger(__name__)
 
@@ -54,6 +55,28 @@ def _write_csv(output_path: Path, name: str, df: Optional[pd.DataFrame]) -> None
     df.to_csv(output_path / name, index=False, encoding="utf-8-sig")
 
 
+def _json_safe(value: Any) -> Any:
+    if isinstance(value, dict):
+        return {str(k): _json_safe(v) for k, v in value.items()}
+    if isinstance(value, list):
+        return [_json_safe(v) for v in value]
+    if isinstance(value, tuple):
+        return [_json_safe(v) for v in value]
+    if hasattr(value, "item"):
+        return value.item()
+    if isinstance(value, Path):
+        return str(value)
+    return value
+
+
+def _write_bel_diagnostics_json(output_path: Path, bel_diagnostics: Any) -> None:
+    safe_payload = _json_safe(bel_diagnostics)
+    (output_path / "bel_diagnostics.json").write_text(
+        json.dumps(safe_payload, indent=2, sort_keys=True, default=str),
+        encoding="utf-8",
+    )
+
+
 def _write_audit_files(
     output_path: Path,
     *,
@@ -65,13 +88,20 @@ def _write_audit_files(
     csm_result: Optional[pd.DataFrame],
     scenario_results: Optional[pd.DataFrame],
     group_result: Optional[pd.DataFrame],
+    bel_diagnostics: Optional[dict[str, Any]] = None,
 ) -> None:
     run_id = uuid4().hex
     snapshot = config_snapshot(config)
+    # Prefer the explicitly captured base-run diagnostics; the module-level
+    # fallback is only a convenience for older callers.
+    if bel_diagnostics is None:
+        bel_diagnostics = get_last_bel_diagnostic_summary()
     (output_path / "assumption_snapshot.json").write_text(
         json.dumps(snapshot, indent=2, sort_keys=True, default=str),
         encoding="utf-8",
     )
+
+    _write_bel_diagnostics_json(output_path, bel_diagnostics)
 
     audit_report = build_audit_report(
         config=config,
@@ -83,6 +113,7 @@ def _write_audit_files(
         scenario_results=scenario_results,
         group_result=group_result,
         run_id=run_id,
+        bel_diagnostics=_json_safe(bel_diagnostics),
     )
     (output_path / "audit_report.json").write_text(
         json.dumps(audit_report, indent=2, sort_keys=True, default=str),
@@ -127,6 +158,7 @@ def save_outputs(
     excel_path: Optional[str] = None,
     group_result: Optional[pd.DataFrame] = None,
     config: Optional[Any] = None,
+    bel_diagnostics: Optional[dict[str, Any]] = None,
 ) -> None:
     """Persist engine outputs to CSV, optional Excel, and optional audit JSON."""
     if projection is None:
@@ -156,6 +188,7 @@ def save_outputs(
             csm_result=csm_result,
             scenario_results=scenario_results,
             group_result=group_result,
+            bel_diagnostics=bel_diagnostics,
         )
 
     logger.info("CSV outputs saved")

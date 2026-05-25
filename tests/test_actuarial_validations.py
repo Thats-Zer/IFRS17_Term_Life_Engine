@@ -6,6 +6,8 @@ import numpy as np
 
 from engine.audit import build_audit_report, config_snapshot, snapshot_hash
 from engine.bel import calculate_bel
+from engine.bel import build_bel_diagnostic_summary
+from engine.bel import get_last_bel_diagnostic_summary
 from engine.cashflows import calculate_cashflows
 from engine.csm import calculate_csm_release, calculate_initial_csm
 from engine.curves import create_discount_curve
@@ -112,6 +114,7 @@ def test_mortality_shock_increases_projected_qx(config_small, mortality_table):
 def test_audit_snapshot_is_deterministic_and_saved(tmp_path, config_small, mortality_table):
     master, projection = _projected_cashflows(config_small, mortality_table)
     bel = calculate_bel(projection, config_small)
+    base_bel_diagnostics = get_last_bel_diagnostic_summary()
     ra = bel[["policy_id"]].assign(ra_per_policy=0.0)
     csm = calculate_initial_csm(bel, ra, config_small, projection=projection)
 
@@ -127,9 +130,13 @@ def test_audit_snapshot_is_deterministic_and_saved(tmp_path, config_small, morta
         csm_result=csm,
         scenario_results=None,
         group_result=None,
+        bel_diagnostics=base_bel_diagnostics,
     )
     assert report["assumption_hash"] == snapshot_hash(snapshot)
     assert report["row_counts"]["projection"]["rows"] == len(projection)
+    assert "bel_diagnostics" in report
+    assert report["bel_diagnostics"] is not None
+    assert report["bel_diagnostics"]["run_type"] == "base"
 
     save_outputs(
         projection=projection.head(5),
@@ -141,16 +148,105 @@ def test_audit_snapshot_is_deterministic_and_saved(tmp_path, config_small, morta
         master=master.head(5),
         excel_output=False,
         config=config_small,
+        bel_diagnostics=base_bel_diagnostics,
     )
 
     saved_snapshot = json.loads((tmp_path / "assumption_snapshot.json").read_text(encoding="utf-8"))
     saved_report = json.loads((tmp_path / "audit_report.json").read_text(encoding="utf-8"))
+    saved_bel_diag = json.loads((tmp_path / "bel_diagnostics.json").read_text(encoding="utf-8"))
 
     assert saved_snapshot == snapshot
     assert saved_report["assumption_hash"] == snapshot_hash(snapshot)
     assert saved_report["run_id"]
     assert saved_report["methodology_version"] == snapshot["methodology_version"]
+    assert "bel_diagnostics" in saved_report
+    assert saved_report["bel_diagnostics"] is not None
+    assert saved_report["bel_diagnostics"]["run_type"] == "base"
+    assert saved_bel_diag is not None
     assert (tmp_path / "run_registry.csv").exists()
+
+
+def test_diagnostics_disabled_does_not_change_bel_outputs(tmp_path, config_small, mortality_table):
+    master, projection = _projected_cashflows(config_small, mortality_table)
+
+    bel_enabled = calculate_bel(projection, config_small)
+    base_summary = get_last_bel_diagnostic_summary()
+
+    disabled_config = config_small.model_copy(update={"enable_bel_diagnostics": False})
+    bel_disabled = calculate_bel(projection, disabled_config)
+
+    pd_enabled = bel_enabled[["policy_id", "bel_per_policy", "pv_bel_outflows", "pv_bel_inflows"]].sort_values("policy_id").reset_index(drop=True)
+    pd_disabled = bel_disabled[["policy_id", "bel_per_policy", "pv_bel_outflows", "pv_bel_inflows"]].sort_values("policy_id").reset_index(drop=True)
+
+    assert np.allclose(pd_enabled["bel_per_policy"], pd_disabled["bel_per_policy"], atol=1e-6)
+    assert np.allclose(pd_enabled["pv_bel_outflows"], pd_disabled["pv_bel_outflows"], atol=1e-6)
+    assert np.allclose(pd_enabled["pv_bel_inflows"], pd_disabled["pv_bel_inflows"], atol=1e-6)
+
+    # Clear stale global summary so we can verify the disabled path writes null safely.
+    import engine.bel as bel_module
+
+    bel_module._last_bel_diagnostic_summary = None
+
+    ra = bel_disabled[["policy_id"]].assign(ra_per_policy=0.0)
+    csm = calculate_initial_csm(bel_disabled, ra, disabled_config, projection=projection)
+
+    save_outputs(
+        projection=projection.head(5),
+        bel_result=bel_disabled.head(5),
+        ra_result=ra.head(5),
+        csm_result=csm.head(5),
+        scenario_results=None,
+        output_dir=str(tmp_path),
+        master=master.head(5),
+        excel_output=False,
+        config=disabled_config,
+        bel_diagnostics=None,
+    )
+
+    saved_report = json.loads((tmp_path / "audit_report.json").read_text(encoding="utf-8"))
+    saved_bel_diag = json.loads((tmp_path / "bel_diagnostics.json").read_text(encoding="utf-8"))
+
+    assert saved_report["bel_diagnostics"] is None
+    assert saved_bel_diag is None
+    assert base_summary is not None
+
+
+def test_base_bel_diagnostics_are_not_overwritten_by_later_summary(tmp_path, config_small, mortality_table):
+    master, projection = _projected_cashflows(config_small, mortality_table)
+    bel = calculate_bel(projection, config_small)
+    base_summary = get_last_bel_diagnostic_summary()
+
+    scenario_like_summary = build_bel_diagnostic_summary(
+        bel.assign(bel_per_policy=bel["bel_per_policy"] * 1.5),
+        0.0,
+        np.float64,
+        run_type="scenario",
+        scenario_name="mortality_up_10",
+    )
+
+    assert base_summary is not None
+    assert base_summary["run_type"] == "base"
+    assert scenario_like_summary["run_type"] == "scenario"
+    assert scenario_like_summary["scenario_name"] == "mortality_up_10"
+
+    ra = bel[["policy_id"]].assign(ra_per_policy=0.0)
+    csm = calculate_initial_csm(bel, ra, config_small, projection=projection)
+
+    save_outputs(
+        projection=projection.head(5),
+        bel_result=bel.head(5),
+        ra_result=ra.head(5),
+        csm_result=csm.head(5),
+        scenario_results=None,
+        output_dir=str(tmp_path),
+        master=master.head(5),
+        excel_output=False,
+        config=config_small,
+        bel_diagnostics=base_summary,
+    )
+
+    saved_report = json.loads((tmp_path / "audit_report.json").read_text(encoding="utf-8"))
+    assert saved_report["bel_diagnostics"]["run_type"] == "base"
 
 
 def test_grouping_includes_cohort_portfolio_and_profitability(config_small, mortality_table):

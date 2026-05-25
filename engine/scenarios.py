@@ -89,6 +89,13 @@ def run_single_scenario(
     #Bu fonksiyon, tek bir senaryoyu çalıştırır ve sonuçları bir sözlük olarak döndürür.
     try:
         config = apply_scenario(base_config, scenario_cfg)
+        # Scenario runs should not overwrite the base run's diagnostic snapshot.
+        # Diagnostics remain available for the base run and are disabled here by default.
+        if hasattr(config, "model_copy"):
+            config = config.model_copy(update={"enable_bel_diagnostics": False})
+        else:
+            setattr(config, "enable_bel_diagnostics", False)
+
         #Bu, temel yapılandırmayı senaryo parametreleriyle güncelleyerek yeni bir yapılandırma oluşturur.
         master_data = create_master_data(config)
         #Bu, senaryo çalıştırılırken kullanılacak ana veri setini oluşturur.
@@ -135,7 +142,7 @@ def run_single_scenario(
         #Bu, projeksiyon tablosuna nakit akışlarını hesaplayarak ekler.
 
 
-        bel_result = calculate_bel(projection, config)
+        bel_result = calculate_bel(projection, config, run_type="scenario", scenario_name=index)
         #Bu, projeksiyon tablosunu kullanarak Best Estimate Liability (BEL) hesaplar sonuçları bel_result DataFrame'ine atar.
 
         ra_result = calculate_risk_adjustment(projection, config)

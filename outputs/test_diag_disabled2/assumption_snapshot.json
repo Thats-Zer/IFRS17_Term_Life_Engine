@@ -1,0 +1,8 @@
+{
+  "approval_status": "draft",
+  "enable_bel_diagnostics": false,
+  "locked_in_discount_rate": 0.03,
+  "methodology_version": "test",
+  "mortality_table_path": "data/mortality_table.csv",
+  "output_path": "outputs/test_diag_disabled2"
+}

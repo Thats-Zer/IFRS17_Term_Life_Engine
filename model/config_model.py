@@ -90,6 +90,12 @@ class ConfigModel(BaseModel):
     excel_output: bool = Field(default=True)
     output_path: str = Field(default="outputs/ifrs17_term_life_projection.xlsx")
 
+    enable_bel_diagnostics: bool = Field(
+        default=True,
+        description="Enable structured BEL diagnostic summary and detailed logging. "
+        "Set to False for large production-scale runs to reduce logging overhead.",
+    )
+
     @field_validator("max_issue_age")
     def validate_age_range(cls, max_issue_age, info):
         min_age = info.data.get("min_issue_age")

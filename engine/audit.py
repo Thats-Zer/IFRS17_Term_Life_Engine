@@ -8,6 +8,8 @@ from uuid import uuid4
 
 import pandas as pd
 
+from engine.bel import get_last_bel_diagnostic_summary
+
 
 def _json_ready(value: Any) -> Any:
     if hasattr(value, "item"):
@@ -54,9 +56,12 @@ def build_audit_report(
     scenario_results: Optional[pd.DataFrame],
     group_result: Optional[pd.DataFrame],
     run_id: Optional[str] = None,
+    bel_diagnostics: Optional[dict[str, Any]] = None,
 ) -> dict[str, Any]:
     assumptions = config_snapshot(config)
     run_id = run_id or uuid4().hex
+    if bel_diagnostics is None:
+        bel_diagnostics = get_last_bel_diagnostic_summary()
 
     totals: dict[str, Any] = {}
     if bel_result is not None and "bel_per_policy" in bel_result.columns:
@@ -81,6 +86,7 @@ def build_audit_report(
             "output_path": assumptions.get("output_path"),
         },
         "assumptions": assumptions,
+        "bel_diagnostics": bel_diagnostics,
         "row_counts": {
             "master": _df_shape(master),
             "projection": _df_shape(projection),

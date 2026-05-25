@@ -5,6 +5,7 @@ from typing import Optional
 
 from engine.assumptions import loadconfig
 from engine.bel import calculate_bel
+from engine.bel import get_last_bel_diagnostic_summary
 from engine.cashflows import calculate_cashflows
 from engine.csm import calculate_csm_rollforward
 from engine.curves import create_discount_curve
@@ -79,6 +80,7 @@ def validate_config(config) -> bool:
 # Main function to run the engine
 def main() -> None:
     success = False
+    base_bel_diagnostics = None
     try:
         logger.info("=" * 70)
         logger.info("Starting IFRS 17 Term Life Engine")
@@ -136,6 +138,9 @@ def main() -> None:
         try:
             logger.info("7. Calculating BEL")
             bel_result = calculate_bel(projection, config)
+            # Capture the base-run diagnostic snapshot now; later scenario runs
+            # happen in the same process and must not overwrite the exported base.
+            base_bel_diagnostics = get_last_bel_diagnostic_summary()
         except Exception as e:
             handle_error("BEL", e)
             raise EngineException("BEL calculation failed", step="BEL", original=e) from e
@@ -195,6 +200,7 @@ def main() -> None:
                 excel_path=config.output_path,
                 group_result=group_result,
                 config=config,
+                bel_diagnostics=base_bel_diagnostics,
             )
         except Exception as e:
             handle_error("OUTPUTS", e)

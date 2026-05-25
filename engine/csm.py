@@ -19,176 +19,168 @@ def calculate_initial_csm(
     config: ModelConfig,
     projection: Optional[pd.DataFrame] = None,
 ) -> pd.DataFrame:
-    
-
     """
-    IFRS17 Başlangıç Contractual Service Margin (CSM) hesapla.
-    
-    CSM Tanımı:
-    Bu engine'de BEL "liability-positive" ve prim girişleriyle netlenmiş
-    olarak hesaplanır:
-        BEL = PV(Outflows) - PV(Inflows)
+    IFRS 17 Initial Contractual Service Margin (CSM) hesapla.
 
-    Bu nedenle başlangıç CSM formülü primleri tekrar düşmez:
+    CSM Sign Convention:
+    - BEL is "liability-positive" and net of premium inflows (from calculate_bel):
+        BEL = PV(Outflows) - PV(Inflows)
+    
+    - Therefore, CSM formula does NOT subtract premiums again:
         Initial CSM = max(-(BEL + RA), 0)
         Onerous Loss = max(BEL + RA, 0)
     
-    Onerous Kontrat Kontrolü:
-    - Eğer (BEL + RA) > 0 ise: CSM = 0, Onerous Loss kaydedilir
-    - Eğer (BEL + RA) < 0 ise: kârlı kontrat/grup için pozitif CSM oluşur
+    - If (BEL + RA) > 0: CSM = 0 and Onerous Loss > 0 (bad contract)
+    - If (BEL + RA) < 0: CSM > 0 and Onerous Loss = 0 (profitable contract)
+    - If (BEL + RA) = 0: CSM = 0 and Onerous Loss = 0 (break-even)
+
+    Input columns from BEL result (new refactored calculate_bel):
+    - policy_id
+    - bel_per_policy (required)
+    - pv_premiums (optional, for reporting)
+    - pv_claims / pv_death_benefits (optional, for reporting)
     
-    CSM Negatif Olabilir mi?
-    - Hayır, IFRS17'de CSM >= 0
-    - Onerous kontrat durumunda: CSM=0, Loss kaydedilir ayrıca
+    Input columns from RA result:
+    - policy_id
+    - ra_per_policy
     
+    Output columns:
+    - policy_id
+    - initial_csm
+    - is_onerous
+    - onerous_loss
+    - pv_premiums (if present in input)
+    - pv_death_benefits (if present in input)
+
     Args:
-        bel_result: BEL per policy (policy_id, bel_per_policy)
-        ra_result: RA per policy (policy_id, ra_per_policy)
+        bel_result: BEL per policy from calculate_bel()
+        ra_result: RA per policy from calculate_risk_adjustment()
         config: ModelConfig
+        projection: Optional projection (for backward compatibility, not used with new BEL)
         
     Returns:
-        pd.DataFrame: policy_id, initial_csm, is_onerous
-        
-    Raises:
-        ValueError: Veriler geçersizse
+        pd.DataFrame: policy_id, initial_csm, is_onerous, onerous_loss, pv_premiums, pv_death_benefits
     """
-
+    
     float_dtype = np.float64 if bool(getattr(config, "use_float64", False)) else np.float32
     bel_result = bel_result.copy()
-    
+
+    if "bel_per_policy" not in bel_result.columns:
+        raise ValueError("BEL result must contain 'bel_per_policy' column")
+
     # ==================================================
-    # PREMIUM ANNUITY PV
+    # PRESERVE REPORTING COLUMNS FROM BEL
     # ==================================================
     
-    # Unutulmuş: projection'dan PV(Premiums) alınması gerekir
-    # Öncelik: projection içinden poliçe bazında PV primleri topla.
-    # Fallback eski davranış kaldırıldı: BEL zaten primleri netlediği için
-    # PV premiums sadece raporlama amaçlı projection'dan okunur.
-
-    # projection'da PV primleri yoksa, bel_result üzerinden tahmini PV primleri hesapla
-    if "pv_premiums" not in bel_result.columns:
-        pv_premiums_df: Optional[pd.DataFrame] = None
-
-        if projection is not None:
-            proj = projection
-            if "policy_id" not in proj.columns:
-                logger.warning("projection'da policy_id yok; PV(Premiums) hesaplanamadı, fallback kullanıldı")
-            else:
-                pv_col: Optional[str]
-                if "PV_Gross_Premium_Inflow" in proj.columns:
-                    pv_col = "PV_Gross_Premium_Inflow"
-                elif "Gross_Premium_Inflow" in proj.columns and "discount_factor_opening" in proj.columns:
-                    pv_col = "PV_Gross_Premium_Inflow"
-                    proj = proj.copy()
-                    proj[pv_col] = (
-                        proj["Gross_Premium_Inflow"] * proj["discount_factor_opening"]
-                    ).astype(float_dtype)
-                else:
-                    pv_col = None
-
-                if pv_col is not None and pv_col in proj.columns:
-                    pv_premiums_df = (
-                        proj.groupby("policy_id", sort=False, as_index=False)[pv_col]
+    # New refactored calculate_bel() now provides these:
+    #   - pv_premiums: Total present value of premiums (already in bel_per_policy via inflows)
+    #   - pv_claims / pv_death_benefits: Total PV of claims (for transparency)
+    #   - pv_bel_outflows, pv_bel_inflows: Full BEL breakdown
+    
+    reporting_cols = ["pv_premiums", "pv_death_benefits", "pv_bel_outflows", "pv_bel_inflows"]
+    for col in reporting_cols:
+        if col not in bel_result.columns:
+            # If running with old-style BEL, try to extract from projection if provided
+            if projection is not None and col == "pv_premiums":
+                if "PV_Gross_Premium_Inflow" in projection.columns:
+                    pv_premiums_agg = (
+                        projection
+                        .groupby("policy_id", sort=False, as_index=False)["PV_Gross_Premium_Inflow"]
                         .sum()
-                        .rename(columns={pv_col: "pv_premiums"})
+                        .rename(columns={"PV_Gross_Premium_Inflow": "pv_premiums"})
                     )
-
-        if pv_premiums_df is not None:
-            bel_result = bel_result.merge(pv_premiums_df, on="policy_id", how="left")
-            bel_result["pv_premiums"] = bel_result["pv_premiums"].fillna(0.0).astype(float_dtype)
-        else:
-            bel_result["pv_premiums"] = np.float32(0.0)
-
-        # ==================================================
-        # PLAIN COVER (EXPECTED DEATH BENEFIT)
-        # ==================================================
-        # Düz teminat hesabı: Expected death benefit = S(t-1) * qx_t * sum_assured
-        # PV = Expected death benefit * discount_factor
-        # Not: Bu değer CSM formülünde doğrudan kullanılmıyor; şeffaflık için poliçe bazında hesaplanır.
-
-        if projection is not None and "pv_death_benefits" not in bel_result.columns:
-            proj = projection
-            required = {"policy_id", "survival_ratio", "qx", "sum_assured"}
-            if not required.issubset(set(proj.columns)):
-                missing = sorted(required - set(proj.columns))
-                logger.warning(f"PV teminat hesaplanamadı; projection eksik kolonlar: {missing}")
-            else:
-                if "PV_Death_Benefits" in proj.columns:
-                    pv_death_col = "PV_Death_Benefits"
-                elif "discount_factor" in proj.columns:
-                    pv_death_col = "PV_Death_Benefits"
-                    proj = proj.copy()
-                    qx_col = "adjusted_qx" if "adjusted_qx" in proj.columns else "qx"
-                    proj["Death_Benefits"] = (
-                        proj["survival_ratio"] * proj[qx_col] * proj["sum_assured"]
-                    ).astype(float_dtype)
-                    proj[pv_death_col] = (proj["Death_Benefits"] * proj["discount_factor"]).astype(float_dtype)
-                else:
-                    pv_death_col = None
-
-                if pv_death_col is not None and pv_death_col in proj.columns:
-                    pv_death_df = (
-                        proj.groupby("policy_id", sort=False, as_index=False)[pv_death_col]
+                    bel_result = bel_result.merge(pv_premiums_agg, on="policy_id", how="left")
+            elif projection is not None and col == "pv_death_benefits":
+                if "PV_Death_Benefits" in projection.columns:
+                    pv_claims_agg = (
+                        projection
+                        .groupby("policy_id", sort=False, as_index=False)["PV_Death_Benefits"]
                         .sum()
-                        .rename(columns={pv_death_col: "pv_death_benefits"})
+                        .rename(columns={"PV_Death_Benefits": "pv_death_benefits"})
                     )
-                    bel_result = bel_result.merge(pv_death_df, on="policy_id", how="left")
-                    bel_result["pv_death_benefits"] = bel_result["pv_death_benefits"].fillna(0.0).astype(float_dtype)
+                    bel_result = bel_result.merge(pv_claims_agg, on="policy_id", how="left")
     
     # ==================================================
-    # MERGE BEL VE RA
+    # MERGE BEL AND RA
     # ==================================================
     
-    csm_data = bel_result.merge(ra_result, on="policy_id", how="left")
-    csm_data["ra_per_policy"] = csm_data["ra_per_policy"].fillna(0)
+    if "ra_per_policy" not in ra_result.columns:
+        raise ValueError("RA result must contain 'ra_per_policy' column")
+    
+    csm_data = bel_result.merge(ra_result[["policy_id", "ra_per_policy"]], on="policy_id", how="left")
+    csm_data["ra_per_policy"] = csm_data["ra_per_policy"].fillna(0).astype(float_dtype)
     
     # ==================================================
-    # CSM CALCULATION
+    # CSM CALCULATION (LIABILITY-POSITIVE BEL CONVENTION)
     # ==================================================
     
+    # Total liability = BEL (already net of premiums) + RA
     csm_data["total_liability"] = (
-        csm_data["bel_per_policy"]
-        + csm_data["ra_per_policy"]
-    )
+        csm_data["bel_per_policy"].astype(float_dtype)
+        + csm_data["ra_per_policy"].astype(float_dtype)
+    ).astype(float_dtype)
     
-    # BEL is liability-positive and already net of premium inflows.
-    # A profitable group has negative fulfilment cash flows after RA.
+    # BEL is liability-positive and ALREADY net of premium inflows.
+    # Therefore: If total_liability < 0 => surplus exists => CSM > 0
+    #            If total_liability > 0 => deficit exists => CSM = 0, Onerous Loss > 0
+    
     csm_data["initial_csm_raw"] = (-csm_data["total_liability"]).astype(float_dtype)
     
     # ==================================================
-    # ONEROUS CONTRACT DETECTION
+    # ONEROUS CONTRACT CLASSIFICATION
     # ==================================================
     
-    csm_data["is_onerous"] = csm_data["total_liability"] > 0
+    # Onerous: when fulfilment cashflows (BEL) + risk adjustment > 0
+    csm_data["is_onerous"] = (csm_data["total_liability"] > 0).astype(bool)
 
-    # Onerous poliçelerde CSM = 0, loss ayrıca kaydedilir (pozitif tutar)
-    csm_data["onerous_loss"] = np.maximum(csm_data["total_liability"], 0).astype(float_dtype)
-    csm_data["initial_csm"] = csm_data["initial_csm_raw"].clip(lower=0).astype(float_dtype)
+    # Onerous loss is the positive part of the total liability (loss amount)
+    # For profitable contracts, this is zero
+    csm_data["onerous_loss"] = (
+        np.maximum(csm_data["total_liability"], 0)
+    ).astype(float_dtype)
+    
+    # CSM is never negative under IFRS 17; clip at zero
+    csm_data["initial_csm"] = (
+        csm_data["initial_csm_raw"].clip(lower=0)
+    ).astype(float_dtype)
     
     # ==================================================
-    # LOGGING
+    # DIAGNOSTICS & LOGGING
     # ==================================================
     
-    onerous_count = csm_data["is_onerous"].sum()
-    onerous_loss_total = csm_data["onerous_loss"].sum()
+    onerous_count = int(csm_data["is_onerous"].sum())
+    profitable_count = int((~csm_data["is_onerous"]).sum())
+    onerous_loss_total = float(csm_data["onerous_loss"].sum())
+    csm_total = float(csm_data["initial_csm"].sum())
     
     if onerous_count > 0:
         logger.warning(
-            f"⚠️ {onerous_count} onerous poliçe, "
-            f"Total onerous loss: {onerous_loss_total:,.2f}"
+            "⚠ %d onerous poliçe(s) detected; Total onerous loss: %s",
+            onerous_count,
+            f"{onerous_loss_total:,.2f}",
         )
     
     logger.info(
-        f"✓ Initial CSM Hesaplandı: "
-        f"Total={csm_data['initial_csm'].sum():,.2f}, "
-        f"Avg={csm_data['initial_csm'].mean():,.2f}"
+        "✓ Initial CSM hesaplandı: Profitable=%d, Onerous=%d, Total CSM=%s, Total Onerous Loss=%s",
+        profitable_count,
+        onerous_count,
+        f"{csm_total:,.2f}",
+        f"{onerous_loss_total:,.2f}",
     )
     
-    # pv_premiums/onerous_loss output'ta tutulur (rollforward + grouping için)
-    cols = ["policy_id", "pv_premiums", "initial_csm", "is_onerous", "onerous_loss"]
-    if "pv_death_benefits" in csm_data.columns:
-        cols.append("pv_death_benefits")
-    return csm_data[cols]
+    # ==================================================
+    # OUTPUT COLUMNS
+    # ==================================================
+    
+    # Preserve all relevant reporting columns for downstream use
+    output_cols = ["policy_id", "initial_csm", "is_onerous", "onerous_loss"]
+    optional_cols = ["pv_premiums", "pv_death_benefits", "pv_bel_outflows", "pv_bel_inflows"]
+    
+    for col in optional_cols:
+        if col in csm_data.columns:
+            output_cols.append(col)
+    
+    return csm_data[output_cols]
 
 
 # ==================================================
