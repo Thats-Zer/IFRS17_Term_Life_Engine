@@ -31,7 +31,9 @@ def _projected_cashflows(config, mortality_table):
 
 def test_survival_ratio_is_opening_survival(config_small, mortality_table):
     _, projection = _projected_cashflows(config_small, mortality_table)
-    sample = projection[projection["policy_id"] == projection["policy_id"].iloc[0]].sort_values("Year")
+    sample = projection[projection["policy_id"] == projection["policy_id"].iloc[0]].sort_values(
+        "Year"
+    )
 
     expected_opening = sample["survival_multiplier"].shift(1).fillna(1.0).cumprod()
 
@@ -59,19 +61,19 @@ def test_bel_reconciles_to_adjusted_liability_cashflows(config_small, mortality_
     lgd = float(getattr(config_small, "counterparty_lgd", 0.0) or 0.0)
     in_force = (projection["Year"] <= projection["coverage_years"]).astype(float)
 
-    adjusted_claims = in_force * projection["survival_ratio"] * projection["adjusted_qx"] * projection["sum_assured"]
+    adjusted_claims = (
+        in_force
+        * projection["survival_ratio"]
+        * projection["adjusted_qx"]
+        * projection["sum_assured"]
+    )
     adjusted_surrender = projection["Surrender_Benefit"].copy()
     re_ceding = projection["Gross_Premium_Inflow"] * re_rate
     re_recovery = adjusted_claims * re_rate
     default_cost = re_recovery * pd_default * lgd
 
     expected_row_bel = (
-        (
-            adjusted_claims
-            + adjusted_surrender
-            + projection["Operating_Expenses"]
-            + default_cost
-        )
+        (adjusted_claims + adjusted_surrender + projection["Operating_Expenses"] + default_cost)
         * projection["discount_factor"]
         + re_ceding * projection["discount_factor_opening"]
         - projection["Gross_Premium_Inflow"] * projection["discount_factor_opening"]
@@ -175,8 +177,16 @@ def test_diagnostics_disabled_does_not_change_bel_outputs(tmp_path, config_small
     disabled_config = config_small.model_copy(update={"enable_bel_diagnostics": False})
     bel_disabled = calculate_bel(projection, disabled_config)
 
-    pd_enabled = bel_enabled[["policy_id", "bel_per_policy", "pv_bel_outflows", "pv_bel_inflows"]].sort_values("policy_id").reset_index(drop=True)
-    pd_disabled = bel_disabled[["policy_id", "bel_per_policy", "pv_bel_outflows", "pv_bel_inflows"]].sort_values("policy_id").reset_index(drop=True)
+    pd_enabled = (
+        bel_enabled[["policy_id", "bel_per_policy", "pv_bel_outflows", "pv_bel_inflows"]]
+        .sort_values("policy_id")
+        .reset_index(drop=True)
+    )
+    pd_disabled = (
+        bel_disabled[["policy_id", "bel_per_policy", "pv_bel_outflows", "pv_bel_inflows"]]
+        .sort_values("policy_id")
+        .reset_index(drop=True)
+    )
 
     assert np.allclose(pd_enabled["bel_per_policy"], pd_disabled["bel_per_policy"], atol=1e-6)
     assert np.allclose(pd_enabled["pv_bel_outflows"], pd_disabled["pv_bel_outflows"], atol=1e-6)
@@ -211,7 +221,9 @@ def test_diagnostics_disabled_does_not_change_bel_outputs(tmp_path, config_small
     assert base_summary is not None
 
 
-def test_base_bel_diagnostics_are_not_overwritten_by_later_summary(tmp_path, config_small, mortality_table):
+def test_base_bel_diagnostics_are_not_overwritten_by_later_summary(
+    tmp_path, config_small, mortality_table
+):
     master, projection = _projected_cashflows(config_small, mortality_table)
     bel = calculate_bel(projection, config_small)
     base_summary = get_last_bel_diagnostic_summary()

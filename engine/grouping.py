@@ -16,13 +16,11 @@ def detect_onerous_groups(csm_result: pd.DataFrame, config: ModelConfig) -> pd.D
 
     csm_result["is_onerous_initial"] = csm_result.get("is_onerous", False)
     csm_closing_raw = csm_result.get("csm_closing_raw", csm_result.get("csm_closing", 0.0))
-    csm_result["is_onerous_subsequently"] = (
-        (csm_closing_raw < 0)
-        & (~csm_result["is_onerous_initial"])
+    csm_result["is_onerous_subsequently"] = (csm_closing_raw < 0) & (
+        ~csm_result["is_onerous_initial"]
     )
     csm_result["is_onerous_group"] = (
-        csm_result["is_onerous_initial"]
-        | csm_result["is_onerous_subsequently"]
+        csm_result["is_onerous_initial"] | csm_result["is_onerous_subsequently"]
     )
 
     if "onerous_loss" in csm_result.columns:
@@ -32,11 +30,15 @@ def detect_onerous_groups(csm_result: pd.DataFrame, config: ModelConfig) -> pd.D
             0.0,
         ).astype(np.float32)
     else:
-        csm_result["onerous_loss_initial"] = np.where(
-            csm_result["is_onerous_initial"],
-            csm_result.get("bel_opening", 0.0) + csm_result.get("ra_opening", 0.0),
-            0.0,
-        ).clip(min=0).astype(np.float32)
+        csm_result["onerous_loss_initial"] = (
+            np.where(
+                csm_result["is_onerous_initial"],
+                csm_result.get("bel_opening", 0.0) + csm_result.get("ra_opening", 0.0),
+                0.0,
+            )
+            .clip(min=0)
+            .astype(np.float32)
+        )
 
     csm_result["onerous_loss_subsequently"] = np.where(
         csm_result["is_onerous_subsequently"],
@@ -44,8 +46,7 @@ def detect_onerous_groups(csm_result: pd.DataFrame, config: ModelConfig) -> pd.D
         0.0,
     ).astype(np.float32)
     csm_result["onerous_loss_total"] = (
-        csm_result["onerous_loss_initial"]
-        + csm_result["onerous_loss_subsequently"]
+        csm_result["onerous_loss_initial"] + csm_result["onerous_loss_subsequently"]
     ).astype(np.float32)
 
     logger.info(
@@ -63,9 +64,13 @@ def group_by_business_nature(projection: pd.DataFrame, config: ModelConfig) -> p
     projection.loc[projection["coverage_years"] > 25, "business_nature"] = "Permanent Life"
 
     if "is_participating" in projection.columns:
-        projection.loc[projection["is_participating"].fillna(False), "business_nature"] = "Participating"
+        projection.loc[projection["is_participating"].fillna(False), "business_nature"] = (
+            "Participating"
+        )
     if "is_investment_linked" in projection.columns:
-        projection.loc[projection["is_investment_linked"].fillna(False), "business_nature"] = "Investment Linked"
+        projection.loc[projection["is_investment_linked"].fillna(False), "business_nature"] = (
+            "Investment Linked"
+        )
 
     return projection
 
@@ -75,7 +80,9 @@ def group_by_risk_characteristics(projection: pd.DataFrame, config: ModelConfig)
     projection = projection.copy()
 
     avg_qx = projection.groupby("policy_id", sort=False)["qx"].mean()
-    projection = projection.merge(avg_qx.to_frame("avg_qx"), left_on="policy_id", right_index=True, how="left")
+    projection = projection.merge(
+        avg_qx.to_frame("avg_qx"), left_on="policy_id", right_index=True, how="left"
+    )
 
     low_qx = float(getattr(config, "low_risk_qx_threshold", 0.01))
     medium_qx = float(getattr(config, "medium_risk_qx_threshold", 0.05))
@@ -89,7 +96,9 @@ def group_by_risk_characteristics(projection: pd.DataFrame, config: ModelConfig)
     )
 
     avg_lapse = projection.groupby("policy_id", sort=False)["lapse_rate"].mean().fillna(0.0)
-    projection = projection.merge(avg_lapse.to_frame("avg_lapse"), left_on="policy_id", right_index=True, how="left")
+    projection = projection.merge(
+        avg_lapse.to_frame("avg_lapse"), left_on="policy_id", right_index=True, how="left"
+    )
     projection["lapse_risk"] = pd.cut(
         projection["avg_lapse"],
         bins=[-np.inf, 0.05, 0.15, np.inf],
@@ -98,7 +107,9 @@ def group_by_risk_characteristics(projection: pd.DataFrame, config: ModelConfig)
 
     projection["reinsurance_group"] = "Retained"
     if "is_reinsured" in projection.columns:
-        projection.loc[projection["is_reinsured"].fillna(False).astype(bool), "reinsurance_group"] = "Ceded"
+        projection.loc[
+            projection["is_reinsured"].fillna(False).astype(bool), "reinsurance_group"
+        ] = "Ceded"
 
     projection["risk_group"] = (
         projection["risk_level"].astype(str)
@@ -128,9 +139,7 @@ def assign_portfolio_boundary(projection: pd.DataFrame, config: ModelConfig) -> 
 
     projection["annual_cohort"] = projection["issue_year"].astype(int).astype(str)
     projection["portfolio_group"] = (
-        projection["portfolio_id"].astype(str)
-        + "_"
-        + projection["business_nature"].astype(str)
+        projection["portfolio_id"].astype(str) + "_" + projection["business_nature"].astype(str)
     )
     return projection
 
@@ -206,31 +215,27 @@ def assign_ifrs17_groups(
         + policy_group["risk_group"].astype(str)
     )
 
-    group_agg = (
-        policy_group
-        .groupby(
-            [
-                "group_id",
-                "portfolio_group",
-                "annual_cohort",
-                "profitability_bucket",
-                "risk_group",
-                "business_nature",
-                "risk_level",
-                "lapse_risk",
-            ],
-            sort=False,
-            as_index=False,
-        )
-        .agg(
-            n_policies=("policy_id", "nunique"),
-            total_sum_assured=("sum_assured", "sum"),
-            coverage_years=("coverage_years", "mean"),
-            is_onerous_group=("is_onerous_group", "any"),
-            onerous_loss_total=("onerous_loss_total", "sum"),
-            csm_opening=("csm_opening", "sum"),
-            csm_closing=("csm_closing", "sum"),
-        )
+    group_agg = policy_group.groupby(
+        [
+            "group_id",
+            "portfolio_group",
+            "annual_cohort",
+            "profitability_bucket",
+            "risk_group",
+            "business_nature",
+            "risk_level",
+            "lapse_risk",
+        ],
+        sort=False,
+        as_index=False,
+    ).agg(
+        n_policies=("policy_id", "nunique"),
+        total_sum_assured=("sum_assured", "sum"),
+        coverage_years=("coverage_years", "mean"),
+        is_onerous_group=("is_onerous_group", "any"),
+        onerous_loss_total=("onerous_loss_total", "sum"),
+        csm_opening=("csm_opening", "sum"),
+        csm_closing=("csm_closing", "sum"),
     )
 
     fill_zero = ["onerous_loss_total", "csm_opening", "csm_closing"]

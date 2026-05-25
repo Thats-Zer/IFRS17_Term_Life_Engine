@@ -62,7 +62,9 @@ def test_projection_merge_discount_curve_is_m_to_1(config_small, mortality_table
     assert "discount_factor" in merged.columns
     assert "discount_factor_opening" in merged.columns
     assert merged["discount_factor"].notna().all(), "discount_factor NaN geldi: Year eşleşmesi yok"
-    assert merged["discount_factor_opening"].notna().all(), "discount_factor_opening NaN geldi: Year eşleşmesi yok"
+    assert (
+        merged["discount_factor_opening"].notna().all()
+    ), "discount_factor_opening NaN geldi: Year eşleşmesi yok"
 
 
 def test_cashflows_bel_ra_smoke(config_small, mortality_table):
@@ -71,7 +73,10 @@ def test_cashflows_bel_ra_smoke(config_small, mortality_table):
 
     # cashflows coverage_years ister; Year'a eşitlemek yanlış (poliçe-sabit olmalı)
     if "coverage_years" not in proj.columns:
-        proj["coverage_years"] = int(getattr(config_small, "coverage_years", getattr(config_small, "projection_years", 1)) or 1)
+        proj["coverage_years"] = int(
+            getattr(config_small, "coverage_years", getattr(config_small, "projection_years", 1))
+            or 1
+        )
 
     # discount_factor gerekli olabilir; yoksa curve merge et
     if "discount_factor" not in proj.columns and "Year" in proj.columns:
@@ -80,7 +85,9 @@ def test_cashflows_bel_ra_smoke(config_small, mortality_table):
         proj["Year"] = proj["Year"].astype(int)
         if "discount_factor_opening" not in curve.columns:
             curve["discount_factor_opening"] = curve["discount_factor"]
-        curve = curve[["Year", "discount_factor", "discount_factor_opening"]].drop_duplicates("Year")
+        curve = curve[["Year", "discount_factor", "discount_factor_opening"]].drop_duplicates(
+            "Year"
+        )
         proj = proj.merge(curve, on="Year", how="left", validate="m:1")
 
     proj = calculate_cashflows(proj, config_small)
@@ -92,13 +99,15 @@ def test_cashflows_bel_ra_smoke(config_small, mortality_table):
     # assert "BEL" in bel.columns, f"BEL sonucu bekleniyor. Kolonlar: {bel.columns.tolist()}"
 
     # NEW:
-    assert (
-        ("BEL" in bel.columns) or ("bel_per_policy" in bel.columns)
+    assert ("BEL" in bel.columns) or (
+        "bel_per_policy" in bel.columns
     ), f"BEL sonucu bekleniyor. Kolonlar: {bel.columns.tolist()}"
 
     ra = calculate_risk_adjustment(proj, config_small)
     assert isinstance(ra, pd.DataFrame)
-    assert ("RA" in ra.columns) or ("ra_per_policy" in ra.columns), f"RA sonucu yok. Kolonlar: {ra.columns.tolist()}"
+    assert ("RA" in ra.columns) or (
+        "ra_per_policy" in ra.columns
+    ), f"RA sonucu yok. Kolonlar: {ra.columns.tolist()}"
 
 
 def test_cashflows_bel_ra_smoke_float64_mode(config_small, mortality_table):
@@ -115,7 +124,9 @@ def test_cashflows_bel_ra_smoke_float64_mode(config_small, mortality_table):
     proj = create_projection_table(master, cfg, mortality_table).copy()
 
     if "coverage_years" not in proj.columns:
-        proj["coverage_years"] = int(getattr(cfg, "coverage_years", getattr(cfg, "projection_years", 1)) or 1)
+        proj["coverage_years"] = int(
+            getattr(cfg, "coverage_years", getattr(cfg, "projection_years", 1)) or 1
+        )
 
     if "discount_factor" not in proj.columns and "Year" in proj.columns:
         curve = create_discount_curve(cfg).copy()
@@ -123,7 +134,9 @@ def test_cashflows_bel_ra_smoke_float64_mode(config_small, mortality_table):
         proj["Year"] = proj["Year"].astype(int)
         if "discount_factor_opening" not in curve.columns:
             curve["discount_factor_opening"] = curve["discount_factor"]
-        curve = curve[["Year", "discount_factor", "discount_factor_opening"]].drop_duplicates("Year")
+        curve = curve[["Year", "discount_factor", "discount_factor_opening"]].drop_duplicates(
+            "Year"
+        )
         proj = proj.merge(curve, on="Year", how="left", validate="m:1")
 
     proj = calculate_cashflows(proj, cfg)

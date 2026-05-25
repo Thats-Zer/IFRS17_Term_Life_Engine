@@ -63,7 +63,9 @@ def calculate_risk_adjustment(
     op_exp = projection["Operating_Expenses"].to_numpy(dtype=np.float32, copy=False)
     gross_premium = projection["Gross_Premium_Inflow"].to_numpy(dtype=np.float32, copy=False)
     discount_factor = projection["discount_factor"].to_numpy(dtype=np.float32, copy=False)
-    discount_factor_opening = projection["discount_factor_opening"].to_numpy(dtype=np.float32, copy=False)
+    discount_factor_opening = projection["discount_factor_opening"].to_numpy(
+        dtype=np.float32, copy=False
+    )
 
     if "coverage_years" in projection.columns:
         in_force = (
@@ -95,23 +97,26 @@ def calculate_risk_adjustment(
 
     for s in range(n_scenarios):
         rng = np.random.default_rng((base_seed + s) % (2**32))
-        mort_mult = rng.lognormal(mean=-0.5 * mort_sigma**2, sigma=mort_sigma, size=n_rows).astype(np.float32)
-        lapse_mult = rng.lognormal(mean=-0.5 * lapse_sigma**2, sigma=lapse_sigma, size=n_rows).astype(np.float32)
-        expense_mult = rng.lognormal(mean=-0.5 * expense_sigma**2, sigma=expense_sigma, size=n_rows).astype(np.float32)
+        mort_mult = rng.lognormal(
+            mean=-0.5 * mort_sigma**2, sigma=mort_sigma, size=n_rows
+        ).astype(np.float32)
+        lapse_mult = rng.lognormal(
+            mean=-0.5 * lapse_sigma**2, sigma=lapse_sigma, size=n_rows
+        ).astype(np.float32)
+        expense_mult = rng.lognormal(
+            mean=-0.5 * expense_sigma**2, sigma=expense_sigma, size=n_rows
+        ).astype(np.float32)
 
         stochastic_lapse = np.clip(lapse_rate * lapse_mult, 0.0, 1.0).astype(np.float32)
         stochastic_qx = (
-            qx
-            * (1 - lapse_mortality_correlation * stochastic_lapse)
-            * mort_mult
-        ).clip(0.0, 1.0).astype(np.float32)
+            (qx * (1 - lapse_mortality_correlation * stochastic_lapse) * mort_mult)
+            .clip(0.0, 1.0)
+            .astype(np.float32)
+        )
 
-        death_benefits = (
-            in_force
-            * survival_ratio
-            * stochastic_qx
-            * sum_assured
-        ).astype(np.float32)
+        death_benefits = (in_force * survival_ratio * stochastic_qx * sum_assured).astype(
+            np.float32
+        )
         surrender = (adj_surrender * lapse_mult).astype(np.float32)
         expenses = (op_exp * expense_mult).astype(np.float32)
         reinsurance_recovery = (death_benefits * re_rate).astype(np.float32)
@@ -127,13 +132,7 @@ def calculate_risk_adjustment(
             default_cost = np.float32(0.0)
 
         pv_row = (
-            (
-                death_benefits
-                + surrender
-                + expenses
-                + default_cost
-                - reinsurance_recovery
-            )
+            (death_benefits + surrender + expenses + default_cost - reinsurance_recovery)
             * discount_factor
             + (reinsurance_ceding - gross_premium) * discount_factor_opening
         ).astype(np.float32)

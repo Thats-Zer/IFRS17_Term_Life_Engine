@@ -25,7 +25,9 @@ class ConfigModel(BaseModel):
     )
 
     inflation_rate: float = Field(default=0.05, ge=0)
-    unit_cost: float = Field(default=1000.0, gt=0, description="Legacy field retained for old configs")
+    unit_cost: float = Field(
+        default=1000.0, gt=0, description="Legacy field retained for old configs"
+    )
 
     base_mort_rate: float = Field(default=0.001, gt=0)
     mortality_age_factor: float = Field(default=0.0001, gt=0)
@@ -36,8 +38,12 @@ class ConfigModel(BaseModel):
     lapse_base_rate: float = Field(default=0.10, ge=0)
 
     coc_ratio: float = Field(default=0.05, ge=0, le=1)
-    s2_margin: float = Field(default=0.25, gt=0, description="Legacy field retained for old configs")
-    op_risk_ratio: float = Field(default=0.02, gt=0, description="Legacy field retained for old configs")
+    s2_margin: float = Field(
+        default=0.25, gt=0, description="Legacy field retained for old configs"
+    )
+    op_risk_ratio: float = Field(
+        default=0.02, gt=0, description="Legacy field retained for old configs"
+    )
 
     reinsurance_cost: float = Field(default=0.4, gt=0)
     counterparty_pd: float = Field(default=0.005, ge=0, le=1)
@@ -46,6 +52,11 @@ class ConfigModel(BaseModel):
     mortality_table_path: str = Field(default="data/mortality_table.csv")
     use_mortality_table: bool = Field(default=True)
     run_scenarios: bool = Field(default=True)
+
+    sample_policy_path: str | None = Field(
+        default=None,
+        description="Optional path to a sample policy CSV input for data lineage demonstrations",
+    )
 
     discount_rate_shift: float = Field(default=0.0)
     mortality_shock_multiplier: float = Field(default=1.0, gt=0)

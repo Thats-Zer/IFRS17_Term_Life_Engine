@@ -1,14 +1,23 @@
-from typing import Tuple, Optional, Dict, Any #Bu modül, fonksiyon tiplerini belirtmek için kullanılır. 
+from typing import (
+    Tuple,
+    Optional,
+    Dict,
+    Any,
+)  # Bu modül, fonksiyon tiplerini belirtmek için kullanılır.
 
-import pandas as pd #Pandas, veri manipülasyonu ve analizi için kullanılan bir kütüphanedir. DataFrame yapısı sağlar.
+import pandas as pd  # Pandas, veri manipülasyonu ve analizi için kullanılan bir kütüphanedir. DataFrame yapısı sağlar.
 
-import numpy as np #Numpy, sayısal hesaplamalar için kullanılan bir kütüphanedir. Diziler ve matrisler üzerinde işlem yapmayı sağlar.
+import numpy as np  # Numpy, sayısal hesaplamalar için kullanılan bir kütüphanedir. Diziler ve matrisler üzerinde işlem yapmayı sağlar.
 
-import logging #Logging, uygulama içinde loglama yapmak için kullanılan bir modüldür. Hata ayıklama ve izleme için kullanılır.
+import logging  # Logging, uygulama içinde loglama yapmak için kullanılan bir modüldür. Hata ayıklama ve izleme için kullanılır.
 
-from model.config_model import ModelConfig #ModelConfig, model yapılandırması için kullanılan bir sınıftır. Model parametrelerini içerir.
+from model.config_model import (
+    ModelConfig,
+)  # ModelConfig, model yapılandırması için kullanılan bir sınıftır. Model parametrelerini içerir.
 
-logger = logging.getLogger(__name__) #Logger, bu modül için bir logger nesnesi oluşturur. Loglama işlemleri bu nesne üzerinden yapılır.
+logger = logging.getLogger(
+    __name__
+)  # Logger, bu modül için bir logger nesnesi oluşturur. Loglama işlemleri bu nesne üzerinden yapılır.
 
 # ==================================================
 # MODULE-LEVEL STORAGE FOR BEL DIAGNOSTICS
@@ -21,10 +30,10 @@ _last_bel_diagnostic_summary: Optional[Dict[str, Any]] = None
 def get_last_bel_diagnostic_summary() -> Optional[Dict[str, Any]]:
     """
     Retrieve the most recent BEL diagnostic summary (if diagnostics were enabled).
-    
+
     Returns None if no diagnostic summary has been built yet or if diagnostics
     are disabled.
-    
+
     Returns:
         dict or None: Dictionary containing BEL diagnostic metrics.
     """
@@ -35,9 +44,10 @@ def get_last_bel_diagnostic_summary() -> Optional[Dict[str, Any]]:
 # BEL CALCULATION (BEST ESTIMATE LIABILITY)
 # ==================================================
 
+
 def calculate_bel(
     projection: pd.DataFrame,
-    config: ModelConfig, #bel hesaplama için gerekli yapılandırma parametrelerini içeren ModelConfig içeri alınır.
+    config: ModelConfig,  # bel hesaplama için gerekli yapılandırma parametrelerini içeren ModelConfig içeri alınır.
     run_type: str = "base",
     scenario_name: Optional[str] = None,
 ) -> pd.DataFrame:
@@ -103,7 +113,9 @@ def calculate_bel(
     def _pv_from_raw(raw_col: str, discount_col: str, output_col: str) -> pd.Series:
         _require_column(raw_col, f"{output_col} hesaplamak için gerekli ham cashflow")
         _require_column(discount_col, f"{output_col} hesaplamak için gerekli iskonto faktörü")
-        return (projection[raw_col].astype(float_dtype) * projection[discount_col].astype(float_dtype)).astype(float_dtype)
+        return (
+            projection[raw_col].astype(float_dtype) * projection[discount_col].astype(float_dtype)
+        ).astype(float_dtype)
 
     def _direct_or_discounted(
         *,
@@ -151,7 +163,10 @@ def calculate_bel(
         # as Net_Death_Benefit + Reinsurance_Recovery so that the BEL breakdown remains
         # fully explainable and the recovery remains shown separately.
         projection["pv_claims"] = (
-            (projection["Net_Death_Benefit"].astype(float_dtype) + projection["Reinsurance_Recovery"].astype(float_dtype))
+            (
+                projection["Net_Death_Benefit"].astype(float_dtype)
+                + projection["Reinsurance_Recovery"].astype(float_dtype)
+            )
             * projection["discount_factor"].astype(float_dtype)
         ).astype(float_dtype)
         pv_claims = projection["pv_claims"]
@@ -168,9 +183,13 @@ def calculate_bel(
     if "PV_Surrender_Benefit" in projection.columns:
         pv_surrender_benefits = projection["PV_Surrender_Benefit"].astype(float_dtype)
     elif "Surrender_Benefit" in projection.columns:
-        pv_surrender_benefits = _pv_from_raw("Surrender_Benefit", "discount_factor", "pv_surrender_benefits")
+        pv_surrender_benefits = _pv_from_raw(
+            "Surrender_Benefit", "discount_factor", "pv_surrender_benefits"
+        )
     elif "adjusted_surrender_benefit" in projection.columns:
-        pv_surrender_benefits = _pv_from_raw("adjusted_surrender_benefit", "discount_factor", "pv_surrender_benefits")
+        pv_surrender_benefits = _pv_from_raw(
+            "adjusted_surrender_benefit", "discount_factor", "pv_surrender_benefits"
+        )
     else:
         raise ValueError("BEL için eksik sütun: Surrender_Benefit / adjusted_surrender_benefit")
 
@@ -186,11 +205,15 @@ def calculate_bel(
     if "PV_Reinsurance_Ceding" in projection.columns:
         pv_reinsurance_ceding = projection["PV_Reinsurance_Ceding"].astype(float_dtype)
     elif "Reinsurance_Ceding" in projection.columns:
-        pv_reinsurance_ceding = _pv_from_raw("Reinsurance_Ceding", "discount_factor_opening", "pv_reinsurance_ceding")
+        pv_reinsurance_ceding = _pv_from_raw(
+            "Reinsurance_Ceding", "discount_factor_opening", "pv_reinsurance_ceding"
+        )
     else:
         re_rate = float(getattr(config, "reinsurance_cost_rate", 0.0) or 0.0)
         if re_rate <= 0:
-            raise ValueError("BEL için eksik sütun: Reinsurance_Ceding (ve config.reinsurance_cost_rate <= 0)")
+            raise ValueError(
+                "BEL için eksik sütun: Reinsurance_Ceding (ve config.reinsurance_cost_rate <= 0)"
+            )
         if "Gross_Premium_Inflow" not in projection.columns:
             raise ValueError("Reinsurance_Ceding fallback için Gross_Premium_Inflow gerekli")
         pv_reinsurance_ceding = (
@@ -203,14 +226,27 @@ def calculate_bel(
     if "PV_Reinsurance_Recovery" in projection.columns:
         pv_reinsurance_recovery = projection["PV_Reinsurance_Recovery"].astype(float_dtype)
     elif "Reinsurance_Recovery" in projection.columns:
-        pv_reinsurance_recovery = _pv_from_raw("Reinsurance_Recovery", "discount_factor", "pv_reinsurance_recovery")
+        pv_reinsurance_recovery = _pv_from_raw(
+            "Reinsurance_Recovery", "discount_factor", "pv_reinsurance_recovery"
+        )
     else:
         re_rate = float(getattr(config, "reinsurance_cost_rate", 0.0) or 0.0)
         if re_rate <= 0:
-            raise ValueError("BEL için eksik sütun: Reinsurance_Recovery (ve config.reinsurance_cost_rate <= 0)")
-        if "Death_Benefits" not in projection.columns and "Adjusted_Death_Benefits" not in projection.columns:
-            raise ValueError("Reinsurance_Recovery fallback için Death_Benefits veya Adjusted_Death_Benefits gerekli")
-        death_base = projection["Death_Benefits"] if "Death_Benefits" in projection.columns else projection["Adjusted_Death_Benefits"]
+            raise ValueError(
+                "BEL için eksik sütun: Reinsurance_Recovery (ve config.reinsurance_cost_rate <= 0)"
+            )
+        if (
+            "Death_Benefits" not in projection.columns
+            and "Adjusted_Death_Benefits" not in projection.columns
+        ):
+            raise ValueError(
+                "Reinsurance_Recovery fallback için Death_Benefits veya Adjusted_Death_Benefits gerekli"
+            )
+        death_base = (
+            projection["Death_Benefits"]
+            if "Death_Benefits" in projection.columns
+            else projection["Adjusted_Death_Benefits"]
+        )
         pv_reinsurance_recovery = (
             death_base.astype(float_dtype)
             * np.float32(re_rate)
@@ -219,14 +255,20 @@ def calculate_bel(
 
     # Counterparty default cost (closing timing)
     if "PV_Counterparty_Default_Cost" in projection.columns:
-        pv_counterparty_default_cost = projection["PV_Counterparty_Default_Cost"].astype(float_dtype)
+        pv_counterparty_default_cost = projection["PV_Counterparty_Default_Cost"].astype(
+            float_dtype
+        )
     elif "Counterparty_Default_Cost" in projection.columns:
-        pv_counterparty_default_cost = _pv_from_raw("Counterparty_Default_Cost", "discount_factor", "pv_counterparty_default_cost")
+        pv_counterparty_default_cost = _pv_from_raw(
+            "Counterparty_Default_Cost", "discount_factor", "pv_counterparty_default_cost"
+        )
     else:
         pd_default = float(getattr(config, "counterparty_pd", 0.0) or 0.0)
         lgd_default = float(getattr(config, "counterparty_lgd", 0.0) or 0.0)
         if pd_default <= 0 or lgd_default <= 0:
-            raise ValueError("BEL için eksik sütun: Counterparty_Default_Cost (ve config.counterparty_pd/lgd <= 0)")
+            raise ValueError(
+                "BEL için eksik sütun: Counterparty_Default_Cost (ve config.counterparty_pd/lgd <= 0)"
+            )
         pv_counterparty_default_cost = (
             pv_reinsurance_recovery.astype(float_dtype)
             * np.float32(pd_default)
@@ -251,13 +293,11 @@ def calculate_bel(
     ).astype(float_dtype)
 
     projection["pv_bel_inflows"] = (
-        projection["pv_premiums"]
-        + projection["pv_reinsurance_recovery"]
+        projection["pv_premiums"] + projection["pv_reinsurance_recovery"]
     ).astype(float_dtype)
 
     projection["bel_per_policy"] = (
-        projection["pv_bel_outflows"]
-        - projection["pv_bel_inflows"]
+        projection["pv_bel_outflows"] - projection["pv_bel_inflows"]
     ).astype(float_dtype)
 
     # Optional compatibility alias for CSM / older downstream logic.
@@ -269,36 +309,34 @@ def calculate_bel(
         - (projection["pv_bel_outflows"] - projection["pv_bel_inflows"])
     ).astype(float_dtype)
 
-    max_diff = float(np.abs(projection["bel_reconciliation_diff"].to_numpy(dtype=np.float64)).max(initial=0.0))
+    max_diff = float(
+        np.abs(projection["bel_reconciliation_diff"].to_numpy(dtype=np.float64)).max(initial=0.0)
+    )
     if max_diff > float(tolerance):
         raise ValueError(
             f"BEL reconciliation failed: max diff={max_diff:.10f}, tolerance={float(tolerance):.10f}"
         )
 
     agg_map: dict[str, str] = {
-        "bel_per_policy": "first",
-        "pv_bel_outflows": "first",
-        "pv_bel_inflows": "first",
-        "pv_claims": "first",
-        "pv_surrender_benefits": "first",
-        "pv_expenses": "first",
-        "pv_reinsurance_ceding": "first",
-        "pv_reinsurance_recovery": "first",
-        "pv_counterparty_default_cost": "first",
-        "pv_premiums": "first",
-        "pv_death_benefits": "first",
-        "bel_reconciliation_diff": "first",
+        "bel_per_policy": "sum",
+        "pv_bel_outflows": "sum",
+        "pv_bel_inflows": "sum",
+        "pv_claims": "sum",
+        "pv_surrender_benefits": "sum",
+        "pv_expenses": "sum",
+        "pv_reinsurance_ceding": "sum",
+        "pv_reinsurance_recovery": "sum",
+        "pv_counterparty_default_cost": "sum",
+        "pv_premiums": "sum",
+        "pv_death_benefits": "sum",
+        "bel_reconciliation_diff": "sum",
     }
 
     for extra in ("sum_assured", "coverage_years", "issue_age"):
         if extra in projection.columns:
             agg_map[extra] = "first"
 
-    bel_result = (
-        projection
-        .groupby("policy_id", sort=False, as_index=False)
-        .agg(agg_map)
-    )
+    bel_result = projection.groupby("policy_id", sort=False, as_index=False).agg(agg_map)
 
     bel_result["bel_sign_explanation"] = np.where(
         bel_result["bel_per_policy"] > 0,
@@ -323,7 +361,9 @@ def calculate_bel(
         "bel_reconciliation_diff",
         "bel_sign_explanation",
     ]
-    trailing_cols = [c for c in ("sum_assured", "coverage_years", "issue_age") if c in bel_result.columns]
+    trailing_cols = [
+        c for c in ("sum_assured", "coverage_years", "issue_age") if c in bel_result.columns
+    ]
     bel_result = bel_result[[c for c in desired_order if c in bel_result.columns] + trailing_cols]
 
     total_bel = float(bel_result["bel_per_policy"].sum())
@@ -360,6 +400,7 @@ def calculate_bel(
 # ==================================================
 # BEL DIAGNOSTIC REPORTING
 # ==================================================
+
 
 def build_bel_diagnostic_summary(
     bel_result: pd.DataFrame,
@@ -422,7 +463,15 @@ def build_bel_diagnostic_summary(
     # ==================================================
 
     component_totals = {}
-    component_cols = ["pv_claims", "pv_expenses", "pv_surrender_benefits", "pv_counterparty_default_cost", "pv_reinsurance_ceding", "pv_premiums", "pv_reinsurance_recovery"]
+    component_cols = [
+        "pv_claims",
+        "pv_expenses",
+        "pv_surrender_benefits",
+        "pv_counterparty_default_cost",
+        "pv_reinsurance_ceding",
+        "pv_premiums",
+        "pv_reinsurance_recovery",
+    ]
     for col in component_cols:
         if col in bel_result.columns:
             component_totals[col] = float(bel_result[col].sum())
@@ -431,7 +480,10 @@ def build_bel_diagnostic_summary(
     # AVERAGE COMPONENTS BY BEL SIGN
     # ==================================================
 
-    average_components = {"liability_like": {}, "asset_like": {}}
+    average_components: dict[str, dict[str, float]] = {
+        "liability_like": {},
+        "asset_like": {},
+    }
 
     if liability_count > 0:
         liability_subset = bel_result[bel_result["bel_per_policy"] > 0]
@@ -452,22 +504,26 @@ def build_bel_diagnostic_summary(
     top_liability_list = []
     top_liability_policies = bel_result.nlargest(10, "bel_per_policy")
     for idx, row in top_liability_policies.iterrows():
-        top_liability_list.append({
-            "policy_id": int(row["policy_id"]),
-            "bel_per_policy": float(row["bel_per_policy"]),
-            "pv_bel_outflows": float(row["pv_bel_outflows"]),
-            "pv_bel_inflows": float(row["pv_bel_inflows"]),
-        })
+        top_liability_list.append(
+            {
+                "policy_id": int(row["policy_id"]),
+                "bel_per_policy": float(row["bel_per_policy"]),
+                "pv_bel_outflows": float(row["pv_bel_outflows"]),
+                "pv_bel_inflows": float(row["pv_bel_inflows"]),
+            }
+        )
 
     top_asset_list = []
     top_asset_policies = bel_result.nsmallest(10, "bel_per_policy")
     for idx, row in top_asset_policies.iterrows():
-        top_asset_list.append({
-            "policy_id": int(row["policy_id"]),
-            "bel_per_policy": float(row["bel_per_policy"]),
-            "pv_bel_outflows": float(row["pv_bel_outflows"]),
-            "pv_bel_inflows": float(row["pv_bel_inflows"]),
-        })
+        top_asset_list.append(
+            {
+                "policy_id": int(row["policy_id"]),
+                "bel_per_policy": float(row["bel_per_policy"]),
+                "pv_bel_outflows": float(row["pv_bel_outflows"]),
+                "pv_bel_inflows": float(row["pv_bel_inflows"]),
+            }
+        )
 
     # ==================================================
     # BUILD SUMMARY DICTIONARY
@@ -531,32 +587,46 @@ def _report_bel_diagnostics(diagnostic_summary: Dict[str, Any]) -> None:
     logger.info("  Total BEL (liability-positive): %s", f"{diagnostic_summary['total_bel']:,.2f}")
     logger.info("  Total PV Outflows: %s", f"{diagnostic_summary['total_pv_outflows']:,.2f}")
     logger.info("  Total PV Inflows: %s", f"{diagnostic_summary['total_pv_inflows']:,.2f}")
-    logger.info("  BEL Reconciliation: %s", f"{diagnostic_summary['reconciliation_difference']:,.2f}")
+    logger.info(
+        "  BEL Reconciliation: %s", f"{diagnostic_summary['reconciliation_difference']:,.2f}"
+    )
 
     logger.info("POLICY COUNTS:")
-    logger.info("  Total Policies: %d", diagnostic_summary['total_policies'])
-    logger.info("  Liability-like (BEL > 0): %d (%.1f%%)", 
-                diagnostic_summary['liability_like_count'],
-                diagnostic_summary['liability_like_percentage'])
-    logger.info("  Asset-like (BEL < 0): %d (%.1f%%)",
-                diagnostic_summary['asset_like_count'],
-                diagnostic_summary['asset_like_percentage'])
-    logger.info("  Break-even (BEL = 0): %d (%.1f%%)",
-                diagnostic_summary['break_even_count'],
-                diagnostic_summary['break_even_percentage'])
+    logger.info("  Total Policies: %d", diagnostic_summary["total_policies"])
+    logger.info(
+        "  Liability-like (BEL > 0): %d (%.1f%%)",
+        diagnostic_summary["liability_like_count"],
+        diagnostic_summary["liability_like_percentage"],
+    )
+    logger.info(
+        "  Asset-like (BEL < 0): %d (%.1f%%)",
+        diagnostic_summary["asset_like_count"],
+        diagnostic_summary["asset_like_percentage"],
+    )
+    logger.info(
+        "  Break-even (BEL = 0): %d (%.1f%%)",
+        diagnostic_summary["break_even_count"],
+        diagnostic_summary["break_even_percentage"],
+    )
 
     # ==================================================
     # COMPONENT PV TOTALS
     # ==================================================
 
     logger.info("COMPONENT PV TOTALS (Outflows):")
-    for col in ["pv_claims", "pv_expenses", "pv_surrender_benefits", "pv_counterparty_default_cost", "pv_reinsurance_ceding"]:
-        if col in diagnostic_summary['component_totals']:
+    for col in [
+        "pv_claims",
+        "pv_expenses",
+        "pv_surrender_benefits",
+        "pv_counterparty_default_cost",
+        "pv_reinsurance_ceding",
+    ]:
+        if col in diagnostic_summary["component_totals"]:
             logger.info("  %s: %s", col, f"{diagnostic_summary['component_totals'][col]:,.2f}")
 
     logger.info("COMPONENT PV TOTALS (Inflows):")
     for col in ["pv_premiums", "pv_reinsurance_recovery"]:
-        if col in diagnostic_summary['component_totals']:
+        if col in diagnostic_summary["component_totals"]:
             logger.info("  %s: %s", col, f"{diagnostic_summary['component_totals'][col]:,.2f}")
 
     # ==================================================
@@ -564,11 +634,11 @@ def _report_bel_diagnostics(diagnostic_summary: Dict[str, Any]) -> None:
     # ==================================================
 
     logger.info("TOP 10 POLICIES - HIGHEST POSITIVE BEL (Liability-like):")
-    if len(diagnostic_summary['top_liability_policies']) > 0:
-        for policy in diagnostic_summary['top_liability_policies']:
+    if len(diagnostic_summary["top_liability_policies"]) > 0:
+        for policy in diagnostic_summary["top_liability_policies"]:
             logger.info(
                 "  Policy %s: BEL=%s, Outflows=%s, Inflows=%s",
-                policy['policy_id'],
+                policy["policy_id"],
                 f"{policy['bel_per_policy']:,.2f}",
                 f"{policy['pv_bel_outflows']:,.2f}",
                 f"{policy['pv_bel_inflows']:,.2f}",
@@ -577,11 +647,11 @@ def _report_bel_diagnostics(diagnostic_summary: Dict[str, Any]) -> None:
         logger.info("  (No positive BEL policies)")
 
     logger.info("TOP 10 POLICIES - LOWEST NEGATIVE BEL (Asset-like):")
-    if len(diagnostic_summary['top_asset_policies']) > 0:
-        for policy in diagnostic_summary['top_asset_policies']:
+    if len(diagnostic_summary["top_asset_policies"]) > 0:
+        for policy in diagnostic_summary["top_asset_policies"]:
             logger.info(
                 "  Policy %s: BEL=%s, Outflows=%s, Inflows=%s",
-                policy['policy_id'],
+                policy["policy_id"],
                 f"{policy['bel_per_policy']:,.2f}",
                 f"{policy['pv_bel_outflows']:,.2f}",
                 f"{policy['pv_bel_inflows']:,.2f}",
@@ -595,17 +665,17 @@ def _report_bel_diagnostics(diagnostic_summary: Dict[str, Any]) -> None:
 
     logger.info("AVERAGE COMPONENTS BY BEL SIGN:")
 
-    avg_by_sign = diagnostic_summary['average_components_by_sign']
-    if len(avg_by_sign.get('liability_like', {})) > 0:
+    avg_by_sign = diagnostic_summary["average_components_by_sign"]
+    if len(avg_by_sign.get("liability_like", {})) > 0:
         logger.info("  Liability-like policies (avg):")
-        for col, val in avg_by_sign['liability_like'].items():
+        for col, val in avg_by_sign["liability_like"].items():
             logger.info("    %s: %s", col, f"{val:,.2f}")
     else:
         logger.info("  Liability-like policies: (none)")
 
-    if len(avg_by_sign.get('asset_like', {})) > 0:
+    if len(avg_by_sign.get("asset_like", {})) > 0:
         logger.info("  Asset-like policies (avg):")
-        for col, val in avg_by_sign['asset_like'].items():
+        for col, val in avg_by_sign["asset_like"].items():
             logger.info("    %s: %s", col, f"{val:,.2f}")
     else:
         logger.info("  Asset-like policies: (none)")
@@ -615,10 +685,13 @@ def _report_bel_diagnostics(diagnostic_summary: Dict[str, Any]) -> None:
     # ==================================================
 
     logger.info("RECONCILIATION CHECK:")
-    logger.info("  Max absolute reconciliation difference: %s", f"{diagnostic_summary['max_abs_reconciliation_diff']:.10e}")
-    logger.info("  Precision mode: %s", diagnostic_summary['float_dtype'])
+    logger.info(
+        "  Max absolute reconciliation difference: %s",
+        f"{diagnostic_summary['max_abs_reconciliation_diff']:.10e}",
+    )
+    logger.info("  Precision mode: %s", diagnostic_summary["float_dtype"])
 
-    max_diff = diagnostic_summary['max_abs_reconciliation_diff']
+    max_diff = diagnostic_summary["max_abs_reconciliation_diff"]
     if max_diff < 1e-5:
         logger.info("  ✓ Reconciliation passed (excellent precision)")
     elif max_diff < 1e-3:
@@ -633,31 +706,29 @@ def _report_bel_diagnostics(diagnostic_summary: Dict[str, Any]) -> None:
 # BEL SENSITIVITY ANALYSIS
 # ==================================================
 
+
 # BEL'in duyarlılık analizi (mortalite, lapse, discount rate şokları).
 def calculate_bel_sensitivity(
-    projection: pd.DataFrame,
-    config: ModelConfig,
-    shock_scenarios: Optional[dict] = None
+    projection: pd.DataFrame, config: ModelConfig, shock_scenarios: Optional[dict] = None
 ) -> pd.DataFrame:
-    
     """
     BEL'in duyarlılık analizi (mortalite, lapse, discount rate şokları).
-    
+
     Şok Senaryoları:
     1. Mortality +10%
     2. Lapse +20%
     3. Discount Rate -100 bps
     4. Combined shock
-    
+
     Args:
         projection: Projection tablosu
         config: ModelConfig
         shock_scenarios: Custom şok senaryoları
-        
+
     Returns:
         pd.DataFrame: Senaryo bazında BEL değerleri
     """
-    
+
     # Default şok senaryoları
     if shock_scenarios is None:
         shock_scenarios = {
@@ -667,9 +738,11 @@ def calculate_bel_sensitivity(
             "lapse_up_20": {"lapse_initial_rate_multiplier": 1.20},
             "rate_down_100bps": {"discount_rate_shift": -0.01},
         }
-    
-    sensitivity_results = [] #Her senaryo için BEL sonuçlarını depolamak için boş bir liste oluşturulur.
-    
+
+    sensitivity_results = (
+        []
+    )  # Her senaryo için BEL sonuçlarını depolamak için boş bir liste oluşturulur.
+
     # Her senaryo için BEL'i hesapla
     for scenario_name, shocks in shock_scenarios.items():
         proj_shock = projection.copy()
@@ -680,18 +753,23 @@ def calculate_bel_sensitivity(
         scenario_updates: dict = {}
 
         if "discount_rate_shift" in shocks:
-            scenario_updates["discount_rate_shift"] = float(shocks.get("discount_rate_shift") or 0.0)
+            scenario_updates["discount_rate_shift"] = float(
+                shocks.get("discount_rate_shift") or 0.0
+            )
         elif "rate_shock" in shocks:
             scenario_updates["discount_rate_shift"] = float(shocks.get("rate_shock") or 0.0)
 
         if "unit_expense_multiplier" in shocks:
-            scenario_updates["unit_expense_multiplier"] = float(shocks.get("unit_expense_multiplier") or 1.0)
+            scenario_updates["unit_expense_multiplier"] = float(
+                shocks.get("unit_expense_multiplier") or 1.0
+            )
 
         # Config copy with scenario updates so that expense shocks apply in calculate_cashflows
         if hasattr(config, "model_copy"):
             cfg = config.model_copy(update=scenario_updates)
         else:
             from copy import deepcopy
+
             cfg = deepcopy(config)
             for k, v in scenario_updates.items():
                 setattr(cfg, k, v)
@@ -717,13 +795,17 @@ def calculate_bel_sensitivity(
             proj_shock["lapse_rate"] = (proj_shock["lapse_rate"] * lapse_mult).clip(0, 1)
 
         # Discount factors (flat rate curve assumption)
-        effective_rate = float(cfg.discount_rate) + float(getattr(cfg, "discount_rate_shift", 0.0) or 0.0)
+        effective_rate = float(cfg.discount_rate) + float(
+            getattr(cfg, "discount_rate_shift", 0.0) or 0.0
+        )
         if effective_rate <= -0.999:
-            raise ValueError(f"discount_rate_shift çok büyük negatif: effective_rate={effective_rate}")
+            raise ValueError(
+                f"discount_rate_shift çok büyük negatif: effective_rate={effective_rate}"
+            )
 
         v = 1.0 / (1.0 + effective_rate)
         t = proj_shock["Year"].astype(np.int32)
-        proj_shock["discount_factor"] = (v ** t).astype(float_dtype)
+        proj_shock["discount_factor"] = (v**t).astype(float_dtype)
         proj_shock["discount_factor_opening"] = (v ** (t - 1)).astype(float_dtype)
 
         # Recompute cashflows under shocked assumptions, then BEL
@@ -732,13 +814,13 @@ def calculate_bel_sensitivity(
         proj_shock = calculate_cashflows(proj_shock, cfg)
         bel_shock = calculate_bel(proj_shock, cfg)
         bel_shock["scenario"] = scenario_name
-        
+
         sensitivity_results.append(bel_shock)
-    
+
     # Tüm senaryo sonuçlarını birleştir
     sensitivity_df = pd.concat(sensitivity_results, ignore_index=True)
-    
+
     # Loglama
     logger.info(f"✓ Sensitivity analysis tamamlandı: {len(shock_scenarios)} senaryo")
-    
-    return sensitivity_df #Senaryo bazında BEL sonuçlarını içeren DataFrame'i döndür.
+
+    return sensitivity_df  # Senaryo bazında BEL sonuçlarını içeren DataFrame'i döndür.

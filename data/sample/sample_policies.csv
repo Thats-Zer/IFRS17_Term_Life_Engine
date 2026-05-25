@@ -1,0 +1,6 @@
+policy_id,issue_age,sum_assured,coverage_years,issue_year,portfolio_id,smoker_flag
+1001,25,50000,10,2026,TERM_LIFE,0
+1002,30,75000,15,2026,TERM_LIFE,1
+1003,40,120000,20,2026,TERM_LIFE,0
+1004,35,60000,12,2026,TERM_LIFE,0
+1005,28,45000,10,2026,TERM_LIFE,1

@@ -197,7 +197,9 @@ def save_outputs(
         logger.info("Excel output skipped by config")
         return
 
-    excel_file = Path(excel_path) if excel_path else output_path / "ifrs17_term_life_projection.xlsx"
+    excel_file = (
+        Path(excel_path) if excel_path else output_path / "ifrs17_term_life_projection.xlsx"
+    )
     excel_file.parent.mkdir(parents=True, exist_ok=True)
 
     try:

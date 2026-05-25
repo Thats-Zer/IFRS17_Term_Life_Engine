@@ -1,0 +1,15 @@
+{
+  "n_policies": 5,
+  "projection_years": 10,
+  "coverage_years": 10,
+  "random_seed": 42,
+  "min_issue_age": 18,
+  "max_issue_age": 55,
+  "discount_rate": 0.05,
+  "mortality_table_path": "data/sample/sample_mortality_table.csv",
+  "use_mortality_table": true,
+  "run_scenarios": false,
+  "output_path": "outputs/ifrs17_term_life_sample.xlsx",
+  "sample_policy_path": "data/sample/sample_policies.csv",
+  "enable_bel_diagnostics": true
+}

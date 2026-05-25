@@ -11,9 +11,15 @@ from engine.csm import calculate_csm_rollforward
 from engine.curves import create_discount_curve
 from engine.grouping import assign_ifrs17_groups
 from engine.outputs import save_outputs
-from engine.projection import create_master_data, create_projection_table, load_mortality_table
+from engine.projection import (
+    create_master_data,
+    create_projection_table,
+    load_mortality_table,
+    load_policy_data,
+)
 from engine.ra import calculate_risk_adjustment
 from engine.scenarios import run_scenarios
+
 
 # Configure console encoding to UTF-8 if possible
 def _configure_console_encoding() -> None:
@@ -37,6 +43,7 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
+
 # Custom exception class for engine errors
 class EngineException(Exception):
     def __init__(
@@ -55,6 +62,7 @@ class EngineException(Exception):
             return f"[{self.step}] {super().__str__()}"
         return super().__str__()
 
+
 # Centralized error handling function
 def handle_error(step_name: str, error: Exception) -> None:
     logger.error(
@@ -64,6 +72,7 @@ def handle_error(step_name: str, error: Exception) -> None:
         str(error),
         exc_info=True,
     )
+
 
 # Validate config values to catch common issues early
 def validate_config(config) -> bool:
@@ -76,6 +85,7 @@ def validate_config(config) -> bool:
 
     logger.info("Config validated")
     return True
+
 
 # Main function to run the engine
 def main() -> None:
@@ -105,17 +115,26 @@ def main() -> None:
 
         try:
             logger.info("3. Creating master data")
-            master_data = create_master_data(config)
+            sample_policy_path = getattr(config, "sample_policy_path", None)
+            if sample_policy_path:
+                logger.info("Using sample policy input: %s", sample_policy_path)
+                master_data = load_policy_data(sample_policy_path, config)
+            else:
+                master_data = create_master_data(config)
         except Exception as e:
             handle_error("MASTER_DATA", e)
-            raise EngineException("Master data creation failed", step="MASTER_DATA", original=e) from e
+            raise EngineException(
+                "Master data creation failed", step="MASTER_DATA", original=e
+            ) from e
 
         try:
             logger.info("4. Creating discount curve")
             discount_curve = create_discount_curve(config)
         except Exception as e:
             handle_error("DISCOUNT_CURVE", e)
-            raise EngineException("Discount curve creation failed", step="DISCOUNT_CURVE", original=e) from e
+            raise EngineException(
+                "Discount curve creation failed", step="DISCOUNT_CURVE", original=e
+            ) from e
 
         try:
             logger.info("5. Creating projection")
@@ -123,17 +142,23 @@ def main() -> None:
             projection = projection.merge(discount_curve, on="Year", how="left")
         except Exception as e:
             handle_error("PROJECTION", e)
-            raise EngineException("Projection creation failed", step="PROJECTION", original=e) from e
+            raise EngineException(
+                "Projection creation failed", step="PROJECTION", original=e
+            ) from e
 
         try:
             logger.info("6. Calculating cashflows")
             if "coverage_years" not in projection.columns:
-                fallback_term = int(getattr(config, "coverage_years", getattr(config, "projection_years", 1)) or 1)
+                fallback_term = int(
+                    getattr(config, "coverage_years", getattr(config, "projection_years", 1)) or 1
+                )
                 projection["coverage_years"] = fallback_term
             projection = calculate_cashflows(projection, config)
         except Exception as e:
             handle_error("CASHFLOWS", e)
-            raise EngineException("Cashflow calculation failed", step="CASHFLOWS", original=e) from e
+            raise EngineException(
+                "Cashflow calculation failed", step="CASHFLOWS", original=e
+            ) from e
 
         try:
             logger.info("7. Calculating BEL")
@@ -150,7 +175,9 @@ def main() -> None:
             ra_result = calculate_risk_adjustment(projection, config)
         except Exception as e:
             handle_error("RA", e)
-            raise EngineException("Risk Adjustment calculation failed", step="RA", original=e) from e
+            raise EngineException(
+                "Risk Adjustment calculation failed", step="RA", original=e
+            ) from e
 
         try:
             logger.info("9. Calculating CSM roll-forward")
@@ -224,7 +251,11 @@ def main() -> None:
         if not success:
             try:
                 if Path("engine.log").exists():
-                    lines = Path("engine.log").read_text(encoding="utf-8", errors="replace").splitlines()
+                    lines = (
+                        Path("engine.log")
+                        .read_text(encoding="utf-8", errors="replace")
+                        .splitlines()
+                    )
                     print("\n".join(lines[-80:]))
             except Exception:
                 pass
