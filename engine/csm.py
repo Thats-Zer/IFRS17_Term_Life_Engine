@@ -13,7 +13,6 @@ logger = logging.getLogger(__name__)
 # ==================================================
 
 
-# CSM Hesaplama:
 def calculate_initial_csm(
     bel_result: pd.DataFrame,
     ra_result: pd.DataFrame,
@@ -221,7 +220,7 @@ def calculate_assumption_changes(
     """
 
     if prior_assumptions is None:
-        # İlk dönem: no prior assumptions
+        # First period: no prior assumptions.
         logger.info("✓ İlk dönem, no unlocking")
         return projection[["policy_id"]].drop_duplicates().assign(unlock_gain_loss=0.0)
 
@@ -337,7 +336,7 @@ def calculate_finance_cost(
     accretion_rate = float(prior_year_rate if prior_year_rate is not None else config.discount_rate)
 
     # ==================================================
-    # FINANCE COST = CSM × ACCRETION RATE
+    # FINANCE COST = CSM * ACCRETION RATE
     # ==================================================
 
     opening_liability["finance_cost"] = (
@@ -531,7 +530,6 @@ def calculate_csm_rollforward(
 
     csm_release_df = calculate_csm_release(projection, csm_opening, config)
 
-    # Poliçe bazında toplama
     # Single reporting-period rollforward: use the current reporting year release,
     # not the full projected lifetime release.
     reporting_year = int(
@@ -553,7 +551,7 @@ def calculate_csm_rollforward(
     unlock_df = calculate_assumption_changes(projection, config, prior_assumptions)
 
     # ==================================================
-    # STEP 6: MERGE VE ROLLFORWARD
+    # STEP 6: MERGE AND ROLLFORWARD
     # ==================================================
 
     rollforward = (
@@ -585,7 +583,7 @@ def calculate_csm_rollforward(
     # LOSS COMPONENT (ONEROUS CONTRACTS)
     # ==================================================
 
-    # Loss component (onerous) = initial onerous loss (pozitif)
+    # Loss component (onerous) equals the initial positive loss amount.
     rollforward["loss_component"] = np.where(
         rollforward["is_onerous"],
         rollforward.get("onerous_loss", 0.0),

@@ -24,11 +24,11 @@ jobs:
 
       - name: Ruff (lint)
         run: |
-          ruff check scripts tests main.py
+          ruff check scripts tests main.py engine model
 
       - name: Black (format check)
         run: |
-          black --check scripts tests main.py
+          black --check scripts tests main.py engine model
 
       - name: Mypy (non-blocking)
         continue-on-error: true

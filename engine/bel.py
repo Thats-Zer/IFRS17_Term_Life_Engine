@@ -3,21 +3,19 @@ from typing import (
     Optional,
     Dict,
     Any,
-)  # Bu modül, fonksiyon tiplerini belirtmek için kullanılır.
+)
 
-import pandas as pd  # Pandas, veri manipülasyonu ve analizi için kullanılan bir kütüphanedir. DataFrame yapısı sağlar.
+import pandas as pd
 
-import numpy as np  # Numpy, sayısal hesaplamalar için kullanılan bir kütüphanedir. Diziler ve matrisler üzerinde işlem yapmayı sağlar.
+import numpy as np
 
-import logging  # Logging, uygulama içinde loglama yapmak için kullanılan bir modüldür. Hata ayıklama ve izleme için kullanılır.
+import logging
 
 from model.config_model import (
     ModelConfig,
-)  # ModelConfig, model yapılandırması için kullanılan bir sınıftır. Model parametrelerini içerir.
+)
 
-logger = logging.getLogger(
-    __name__
-)  # Logger, bu modül için bir logger nesnesi oluşturur. Loglama işlemleri bu nesne üzerinden yapılır.
+logger = logging.getLogger(__name__)
 
 # ==================================================
 # MODULE-LEVEL STORAGE FOR BEL DIAGNOSTICS
@@ -47,7 +45,7 @@ def get_last_bel_diagnostic_summary() -> Optional[Dict[str, Any]]:
 
 def calculate_bel(
     projection: pd.DataFrame,
-    config: ModelConfig,  # bel hesaplama için gerekli yapılandırma parametrelerini içeren ModelConfig içeri alınır.
+    config: ModelConfig,
     run_type: str = "base",
     scenario_name: Optional[str] = None,
 ) -> pd.DataFrame:
@@ -707,7 +705,7 @@ def _report_bel_diagnostics(diagnostic_summary: Dict[str, Any]) -> None:
 # ==================================================
 
 
-# BEL'in duyarlılık analizi (mortalite, lapse, discount rate şokları).
+# BEL sensitivity analysis for mortality, lapse, and discount-rate shocks.
 def calculate_bel_sensitivity(
     projection: pd.DataFrame, config: ModelConfig, shock_scenarios: Optional[dict] = None
 ) -> pd.DataFrame:
@@ -729,7 +727,7 @@ def calculate_bel_sensitivity(
         pd.DataFrame: Senaryo bazında BEL değerleri
     """
 
-    # Default şok senaryoları
+    # Default shock scenarios.
     if shock_scenarios is None:
         shock_scenarios = {
             # New-style keys (aligned with engine.scenarios.SCENARIOS)
@@ -743,7 +741,7 @@ def calculate_bel_sensitivity(
         []
     )  # Her senaryo için BEL sonuçlarını depolamak için boş bir liste oluşturulur.
 
-    # Her senaryo için BEL'i hesapla
+    # Calculate BEL for each scenario.
     for scenario_name, shocks in shock_scenarios.items():
         proj_shock = projection.copy()
 
@@ -817,10 +815,10 @@ def calculate_bel_sensitivity(
 
         sensitivity_results.append(bel_shock)
 
-    # Tüm senaryo sonuçlarını birleştir
+    # Combine all scenario outputs.
     sensitivity_df = pd.concat(sensitivity_results, ignore_index=True)
 
-    # Loglama
+    # Logging summary.
     logger.info(f"✓ Sensitivity analysis tamamlandı: {len(shock_scenarios)} senaryo")
 
     return sensitivity_df  # Senaryo bazında BEL sonuçlarını içeren DataFrame'i döndür.

@@ -8,6 +8,14 @@ Projenin amacı, aktüeryal modelleme bilgisini, Python mühendisliğini ve IFRS
 
 > Akademik kapsam: Bu proje eğitim ve portföy amacıyla hazırlanmıştır. Üretim ortamında kullanılacak gerçek bir IFRS 17 sistemi değildir. Üretim seviyesi için resmi metodoloji onayı, varsayım yönetimi, kalibrasyon, kontroller, mutabakatlar, veri geçmişi ve bağımsız validasyon gerekir.
 
+## Bu Repository Neden Var?
+
+IFRS 17 uygulamaları çoğu zaman incelenmesi zor, kapalı, karmaşık ve yüksek governance gerektiren sistemlerdir. Bu repo bunun tersini amaçlar: eğitim odaklı, konfigürasyonla yönetilebilen ve üzerinde oynanabilen bir değerleme sandbox'ı sunar.
+
+Kullanıcılar `config/config.json` üzerinden varsayımları değiştirebilir, motoru çalıştırabilir, ara çıktıları inceleyebilir ve varsayımların projection, cashflows, BEL, RA, CSM, grouping, scenarios, diagnostics ve audit dosyalarına nasıl aktığını gözlemleyebilir.
+
+Amaç production seviyesinde bir IFRS 17 sistemi sunmak değildir. Amaç temel mekanikleri görünür, test edilebilir ve tartışılabilir hale getirmektir.
+
 ## Proje Özeti
 
 Bu proje, **Term Life** portföyleri için **basitleştirilmiş IFRS 17 çerçevesi** altında çalışan, Python tabanlı modüler bir aktüeryal değerleme motorudur. Projeksiyon tabloları, nakit akışları, BEL, RA, CSM, gruplama çıktıları, senaryo sonuçları ve audit çıktıları üretir. Mimari; **modülerlik, izlenebilirlik, test edilebilirlik, açıklanabilirlik ve denetlenebilirlik** üzerine kuruludur.

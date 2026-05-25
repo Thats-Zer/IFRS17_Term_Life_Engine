@@ -11,8 +11,6 @@ import pandas as pd
 from model.config_model import ModelConfig
 from engine.curves import get_exponential_lapse
 
-# Üstel ayrılma eğrisini içeri aktarma
-
 logger = logging.getLogger(__name__)
 
 
@@ -55,16 +53,16 @@ def load_mortality_table(file_path: str) -> pd.DataFrame:
     except Exception as e:
         raise ValueError(f"CSV okuma hatası ({file_path}): {e}")
 
-    # Sütun adlarını normalize et (büyük/küçük harf duyarlılığı)
+    # Normalize column names for case-insensitive CSV input.
     mortality_table.columns = mortality_table.columns.str.lower().str.strip()
 
-    # age sütunu kontrolü
+    # Required age column.
     if "age" not in mortality_table.columns:
         raise ValueError(
             f"CSV'de 'age' sütunu gerekli, bulunan sütunlar: {mortality_table.columns.tolist()}"
         )
 
-    # qx/rate sütunu kontrolü
+    # Mortality rate column aliases.
     rate_col = None
     for col in ["qx", "mortality_rate", "rate", "mortality_age"]:
         if col in mortality_table.columns:
@@ -76,29 +74,29 @@ def load_mortality_table(file_path: str) -> pd.DataFrame:
             f"CSV'de mortalite oran sütunu gerekli (qx, mortality_rate, rate), bulunan: {mortality_table.columns.tolist()}"
         )
 
-    # qx sütunu adını standardize et
+    # Standardize the mortality rate column name.
     mortality_table = mortality_table.rename(columns={rate_col: "qx"})
 
-    # Veri tipi dönüştür
+    # Coerce input types.
     try:
         mortality_table["age"] = mortality_table["age"].astype(np.int32)
         mortality_table["qx"] = mortality_table["qx"].astype(np.float32)
     except Exception as e:
         raise ValueError(f"Veri tipi dönüştürme hatası: {e}")
 
-    # qx validasyonu: [0, 1] aralığında olmalı
+    # qx must be a probability.
     if (mortality_table["qx"] < 0).any() or (mortality_table["qx"] > 1).any():
         invalid_rows = mortality_table[(mortality_table["qx"] < 0) | (mortality_table["qx"] > 1)]
         raise ValueError(f"qx değerleri [0, 1] aralığında olmalı. Hatalı satırlar:\n{invalid_rows}")
 
-    # age validasyonu: negatif olmamalı
+    # age must be non-negative.
     if (mortality_table["age"] < 0).any():
         raise ValueError("age değerleri >= 0 olmalı")
 
-    # Sıralama ve reset
+    # Keep interpolation inputs sorted.
     mortality_table = mortality_table.sort_values("age").reset_index(drop=True)
 
-    # NaN kontrol
+    # Reject incomplete mortality rows.
     if mortality_table.isna().any().any():
         raise ValueError(
             f"CSV'de NaN değer bulundu: {mortality_table[mortality_table.isna().any(axis=1)]}"
@@ -138,12 +136,12 @@ def get_mortality_rate(age: int, mortality_table: pd.DataFrame) -> float:
     min_age = mortality_table["age"].min()
     max_age = mortality_table["age"].max()
 
-    # Edge case: minimum yaştan küçük
+    # Edge case: below the table range.
     if age < min_age:
         logger.debug(f"⚠️ age ({age}) < min_table_age ({min_age}), en küçük oranı kullan")
         return mortality_table["qx"].iloc[0]
 
-    # Edge case: maksimum yaştan büyük
+    # Edge case: above the table range.
     if age > max_age:
         logger.debug(f"⚠️ age ({age}) > max_table_age ({max_age}), en büyük oranı kullan")
         return mortality_table["qx"].iloc[-1]
@@ -153,7 +151,7 @@ def get_mortality_rate(age: int, mortality_table: pd.DataFrame) -> float:
     if not match.empty:
         return match["qx"].iloc[0]
 
-    # Lineer interpolasyon
+    # Linear interpolation between available table ages.
     lower_row = mortality_table[mortality_table["age"] <= age].iloc[-1]
     upper_row = mortality_table[mortality_table["age"] > age].iloc[0]
 
@@ -316,7 +314,7 @@ def create_year_age_grid(master_data: pd.DataFrame, projection_years: int) -> pd
     """
     years = np.arange(1, projection_years + 1, dtype=np.int32)
 
-    # Cartesian product: tüm kombinasyonlar
+    # Cartesian product of policies and projection years.
     grid = pd.DataFrame(
         {
             "policy_id": np.repeat(master_data["policy_id"].values, len(years)),
@@ -324,19 +322,19 @@ def create_year_age_grid(master_data: pd.DataFrame, projection_years: int) -> pd
         }
     )
 
-    # issue_age + coverage_years merge et
+    # Attach policy attributes.
     grid = grid.merge(
         master_data[["policy_id", "issue_age", "coverage_years", "issue_year", "portfolio_id"]],
         on="policy_id",
         how="left",
     )
 
-    # Current age hesapla
+    # Current age in each policy year.
     grid["current_age"] = (
         grid["issue_age"].astype(np.int16) + grid["Year"].astype(np.int16) - 1
     ).astype(np.int16)
 
-    # Veri tipi optimizasyonu
+    # Keep projection dtypes compact.
     grid = grid.astype(
         {
             "policy_id": np.int32,
@@ -348,10 +346,10 @@ def create_year_age_grid(master_data: pd.DataFrame, projection_years: int) -> pd
         }
     )
 
-    # in_force: coverage döneminde mi?
+    # Coverage-period in-force flag.
     grid["in_force"] = (grid["Year"] <= grid["coverage_years"]).astype(bool)
 
-    # NaN kontrolü
+    # Defensive NaN handling for merged policy attributes.
     if grid.isna().any().any():
         nan_count = grid.isna().sum().sum()
         logger.warning(f"⚠️ Grid'de {nan_count} NaN değer bulundu, dolduruldu")
@@ -423,19 +421,19 @@ def attach_mortality_and_lapse(
     """
     projection = projection.copy()
 
-    # Mortalite tablosu yükle (eğer None ise ve config'de belirtilmişse)
+    # Load the configured mortality table when one was not supplied.
     if mortality_table is None and config.use_mortality_table:
         mortality_table = load_mortality_table(config.mortality_table_path)
 
     # ===============================================
-    # MORTALITE ORANI
+    # MORTALITY RATE
     # ===============================================
 
     mortality_mult = float(getattr(config, "mortality_shock_multiplier", 1.0) or 1.0)
     mortality_add = float(getattr(config, "mortality_shock", 0.0) or 0.0)
 
     if mortality_table is not None:
-        # Tablodan lookup (vektörize): numpy.interp ile (out-of-range clamp dahil)
+        # Vectorized table lookup with numpy.interp and out-of-range clamping.
         mt = mortality_table.sort_values("age")
         ages = mt["age"].to_numpy(dtype=np.float32, copy=False)
         qx_vals = mt["qx"].to_numpy(dtype=np.float32, copy=False)
@@ -454,20 +452,20 @@ def attach_mortality_and_lapse(
         logger.debug("✓ Mortalite oranları tablodan alındı")
 
     else:
-        # Formül tabanlı fallback
+        # Formula-based fallback.
         projection["qx"] = (
             config.base_mort_rate
             + (projection["current_age"] - config.min_issue_age) * config.mortality_age_factor
         ).astype(np.float32)
         logger.debug("✓ Mortalite oranları formülden hesaplandı")
 
-    # Şokları her durumda uygula: multiplier + additive
+    # Apply mortality multiplier and additive shocks in all paths.
     projection["qx"] = (
         (projection["qx"] * mortality_mult + mortality_add).clip(0, 1).astype(np.float32)
     )
 
     # ===============================================
-    # LAPSE ORANI
+    # LAPSE RATE
     # ===============================================
 
     lapse_mult = float(getattr(config, "lapse_initial_rate_multiplier", 1.0) or 1.0)
@@ -480,18 +478,18 @@ def attach_mortality_and_lapse(
     projection["lapse_rate"] = lapse_array
 
     # ===============================================
-    # SURVIVAL PROBABILITY (KÜMÜLATIF)
+    # SURVIVAL PROBABILITY
     # ===============================================
 
-    # Yıl içi survival (competing decrements - bağımsız yıllık yaklaşım):
+    # Within-year survival under a simple competing decrements assumption:
     #   survive_t = (1 - qx_t) * (1 - lapse_t)
-    # Not: Bu, 1 - qx - lapse yaklaşımına göre daha tutarlı bir competing-decrements varsayımıdır.
+    # This is more coherent than a direct 1 - qx - lapse approximation.
     projection["survival_multiplier"] = (
         ((1 - projection["qx"]) * (1 - projection["lapse_rate"])).clip(0, 1).astype(np.float32)
     )
 
-    # Kümülatif survival (opening): S_open(t) = ∏_{i=1..t-1} survival_multiplier(i)
-    # Böylece Year=t satırındaki survival_ratio, yıl başındaki in-force oranını temsil eder.
+    # Opening survival: S_open(t) = product of prior-year survival multipliers.
+    # Thus the Year=t survival_ratio represents beginning-of-year in-force exposure.
     projection = projection.sort_values(["policy_id", "Year"]).reset_index(drop=True)
 
     g = projection.groupby("policy_id", sort=False)
@@ -516,7 +514,7 @@ def attach_mortality_and_lapse(
 
 
 # ==================================================
-# PROJECTION TABLE (MODÜLER)
+# PROJECTION TABLE
 # ==================================================
 
 
@@ -544,13 +542,13 @@ def create_projection_table(
     """
     logger.info("Projection tablosu oluşturuluyor...")
 
-    # Step 1: Grid oluştur
+    # Step 1: Build policy-year grid.
     projection = create_year_age_grid(master_data, config.projection_years)
 
-    # Step 2: Finansal veri ekle
+    # Step 2: Attach financial attributes.
     projection = attach_financial_data(projection, master_data)
 
-    # Step 3: Mortalite ve lapse ekle
+    # Step 3: Attach mortality, lapse, and survival assumptions.
     projection = attach_mortality_and_lapse(projection, config, mortality_table)
 
     logger.info(

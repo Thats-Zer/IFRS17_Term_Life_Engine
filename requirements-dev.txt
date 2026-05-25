@@ -2,3 +2,4 @@ pytest-cov
 ruff
 black
 mypy
+matplotlib

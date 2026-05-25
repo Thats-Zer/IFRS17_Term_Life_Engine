@@ -17,6 +17,8 @@ It is designed for learning, demonstration, portfolio review, technical challeng
 
 The model uses synthetic or sample data by default. It is not calibrated to real insurer experience data unless extended by the user.
 
+The default mortality input uses a 1958 CSO mortality table. This is an illustrative public-style assumption input for demonstration and should not be interpreted as calibration to a real insurer portfolio.
+
 The following assumptions are illustrative unless replaced with calibrated inputs:
 
 - Mortality
@@ -55,7 +57,7 @@ Operational boundaries include:
 
 ## 5. Validation Limitations
 
-Current test coverage is 69%. The target is 90%+.
+Current test coverage is 79%. The target is 90%+.
 
 The automated tests validate key mechanics, including projection, discount timing, BEL reconciliation, CSM logic, diagnostics, sample data handling, and quality gates.
 

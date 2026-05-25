@@ -2,7 +2,7 @@
 
 ## Current Status
 
-- Current coverage: 69%
+- Current coverage: 79%
 - Target coverage: 90%+
 
 The goal is to improve confidence in the model mechanics without creating brittle tests that merely duplicate implementation details.

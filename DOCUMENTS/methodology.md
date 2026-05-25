@@ -2,7 +2,7 @@
 
 ## 1. Purpose and Scope
 
-This project is a portfolio-grade IFRS 17 Term Life valuation engine. It models a simplified, IFRS 17 principles-aligned valuation workflow for term life insurance contracts.
+This project is a portfolio-grade IFRS 17 Term Life valuation engine. It models a simplified but explainable IFRS 17 principles-aligned valuation workflow for term life insurance contracts.
 
 The purpose is educational and demonstrative: to show actuarial engineering, model structure, testability, diagnostics, and audit-oriented output design. It is not a production IFRS 17 system, not a regulatory reporting tool, and not official actuarial or accounting advice.
 
@@ -60,7 +60,7 @@ Policy attributes include:
 
 The projection expands policies into policy-year rows. Each row represents a contract in a projection year, with current age, coverage status, mortality, lapse, and survival information.
 
-Mortality can be read from a mortality table when configured. If a table is not used, the engine applies fallback mortality logic based on issue age and configured mortality factors. Mortality shocks can be applied for scenario testing.
+Mortality can be read from a mortality table when configured. The default mortality input uses a 1958 CSO mortality table. If a table is not used, the engine applies fallback mortality logic based on issue age and configured mortality factors. Mortality shocks can be applied for scenario testing.
 
 Lapse assumptions are modeled through a configurable lapse curve, including an initial lapse rate and decay. Lapse shocks can be applied in scenario runs.
 
@@ -91,7 +91,7 @@ The layer also calculates:
 - Net cashflow
 - Present value cashflow columns used by BEL and reconciliation tests
 
-The assumptions are intentionally illustrative unless replaced with calibrated inputs.
+The assumptions are intentionally illustrative and are not calibrated to insurer experience data. A future extension would include mortality, lapse, expense, and premium calibration using real or publicly documented experience studies.
 
 ## 5. Discounting and Timing Convention
 
@@ -231,7 +231,7 @@ Validation coverage includes:
 - Sample data validation tests
 - CI quality gates
 
-Current test coverage is 69%. The stated coverage target is 90%+.
+Current test coverage is 79%. The stated coverage target is 90%+.
 
 The tests validate key mechanics, but they do not replace actuarial model validation by qualified professionals.
 
@@ -244,7 +244,8 @@ Key limitations:
 - It is not production-ready.
 - It is not suitable for regulatory reporting.
 - It uses synthetic or sample data by default.
-- Assumptions are illustrative unless replaced.
+- Assumptions are illustrative and are not calibrated to insurer experience data.
+- The default mortality input uses a 1958 CSO mortality table, but this should not be interpreted as real insurer calibration.
 - RA methodology is simplified.
 - CSM treatment is simplified.
 - Full transition mechanics are not implemented unless explicitly present in the codebase.
@@ -260,8 +261,10 @@ Potential improvements include:
 - Stronger coverage-unit methodology
 - Assumption unlocking
 - Transition approach support
-- Richer RA methodology
+- Cohort-level CSM
+- Reinsurance held measurement
+- Richer RA methodology, including confidence-level and cost-of-capital alternatives
 - Richer scenario framework
 - Dashboard or interactive demo
-- Real calibration data
+- Mortality, lapse, expense, and premium calibration using real or publicly documented experience studies
 - Expanded test coverage toward 90%+
