@@ -4,17 +4,28 @@
 
 **A portfolio-grade IFRS 17 Term Life valuation engine built to be inspected, challenged, tested, and improved.**
 
-This is a Python-based modular actuarial valuation engine for Term Life insurance under a simplified IFRS 17 framework. It covers projection, cashflows, BEL, RA, CSM, grouping, scenarios, and outputs/audit.
+This is a Python-based modular actuarial valuation engine for Term Life insurance under a
+simplified IFRS 17 framework. It covers projection, cashflows, BEL, RA, CSM, grouping,
+scenarios, and outputs/audit.
 
-The project is a portfolio-grade CV project. It is intended to demonstrate actuarial engineering, model governance awareness, auditability, and testable Python design. It is not a production IFRS 17 system and is not a regulatory reporting tool.
+The project is a portfolio-grade CV project. It is intended to demonstrate actuarial
+engineering, model governance awareness, auditability, and testable Python design. It is
+not a production IFRS 17 system and is not a regulatory reporting tool.
 
-The engine is a simplified but explainable IFRS 17 principles-aligned engine. Assumptions are illustrative and not calibrated to insurer experience data. The default mortality input uses a 1958 CSO mortality table; a future extension would include mortality, lapse, expense, and premium calibration using real or publicly documented experience studies.
+The engine is a simplified but explainable IFRS 17 principles-aligned engine. Assumptions
+are illustrative and not calibrated to insurer experience data. The default mortality
+input uses a 1958 CSO mortality table; a future extension would include mortality, lapse,
+expense, and premium calibration using real or publicly documented experience studies.
 
 ## Why This Repository Exists
 
-IFRS 17 implementations are often difficult to inspect because production systems are complex, proprietary, and heavily governed. This repository takes the opposite approach: it is an educational and configurable valuation sandbox.
+IFRS 17 implementations are often difficult to inspect because production systems are
+complex, proprietary, and heavily governed. This repository takes the opposite approach:
+it is an educational and configurable valuation sandbox.
 
-Users can change assumptions through `config/config.json`, run the engine, inspect intermediate outputs, and challenge how assumptions flow through projection, cashflows, BEL, RA, CSM, grouping, scenarios, diagnostics, and audit files.
+Users can change assumptions through `config/config.json`, run the engine, inspect
+intermediate outputs, and challenge how assumptions flow through projection, cashflows,
+BEL, RA, CSM, grouping, scenarios, diagnostics, and audit files.
 
 The goal is not to provide a production IFRS 17 system. The goal is to make the core mechanics visible, testable, and easier to discuss.
 
@@ -64,7 +75,8 @@ Run quality checks:
 
 ## Architecture
 
-The project follows a layered valuation engine design. Each stage produces structured tabular outputs that can be inspected, reconciled, tested, and challenged.
+The project follows a layered valuation engine design. Each stage produces structured
+tabular outputs that can be inspected, reconciled, tested, and challenged.
 
 ```mermaid
 flowchart LR
@@ -103,7 +115,9 @@ BEL uses a liability-positive convention:
 BEL = PV(outflows) - PV(inflows)
 ```
 
-The BEL output includes a per-policy breakdown of present value outflows and inflows, including claims, surrender benefits, expenses, reinsurance ceding, reinsurance recovery, counterparty default cost, premiums, and death benefits.
+The BEL output includes a per-policy breakdown of present value outflows and inflows,
+including claims, surrender benefits, expenses, reinsurance ceding, reinsurance recovery,
+counterparty default cost, premiums, and death benefits.
 
 The core reconciliation is:
 
@@ -116,7 +130,9 @@ The engine writes audit-oriented JSON outputs:
 - `bel_diagnostics.json`: BEL diagnostic summary for reviewer inspection
 - `audit_report.json`: assumption hash, row counts, reconciliation totals, diagnostics, and run metadata
 
-Base BEL diagnostics are captured explicitly after the base BEL calculation and passed to the output layer. Scenario runs disable diagnostics by default so the base diagnostic summary is protected from scenario overwrite risk.
+Base BEL diagnostics are captured explicitly after the base BEL calculation and passed to
+the output layer. Scenario runs disable diagnostics by default so the base diagnostic
+summary is protected from scenario overwrite risk.
 
 ## Sample Data and Data Lineage
 
@@ -126,11 +142,15 @@ Sample synthetic data is provided under `data/sample`:
 - `data/sample/sample_mortality_table.csv`
 - `data/sample/sample_config.json`
 
-The sample dataset is synthetic and designed for inspection and reproducibility. The engine can optionally load external policy input through `sample_policy_path` in the config.
+The sample dataset is synthetic and designed for inspection and reproducibility. The
+engine can optionally load external policy input through `sample_policy_path` in the
+config.
 
-Input validation checks required fields, unique policy IDs, non-negative sum assured, valid issue ages, positive coverage years, and missing values.
+Input validation checks required fields, unique policy IDs, non-negative sum assured,
+valid issue ages, positive coverage years, and missing values.
 
-Data lineage is covered in [`DOCUMENTS/methodology.md`](DOCUMENTS/methodology.md) and [`DOCUMENTS/architecture.md`](DOCUMENTS/architecture.md).
+Data lineage is covered in [`DOCUMENTS/methodology.md`](DOCUMENTS/methodology.md) and
+[`DOCUMENTS/architecture.md`](DOCUMENTS/architecture.md).
 
 ## Performance Benchmark
 
@@ -151,7 +171,8 @@ Benchmarks are machine-dependent and should be interpreted as local performance 
 
 ## Challenge This Project
 
-This project is intentionally inspectable and challengeable. Reviewers are invited to question the model design and implementation, especially:
+This project is intentionally inspectable and challengeable. Reviewers are invited to
+question the model design and implementation, especially:
 
 - BEL convention
 - Timing assumptions
@@ -163,7 +184,9 @@ This project is intentionally inspectable and challengeable. Reviewers are invit
 - Tests
 - Architecture
 
-The goal is not to claim production-level IFRS 17 compliance. The goal is to make the actuarial logic and engineering choices visible enough to be reviewed, debated, and improved.
+The goal is not to claim production-level IFRS 17 compliance. The goal is to make the
+actuarial logic and engineering choices visible enough to be reviewed, debated, and
+improved.
 
 ## Limitations
 
@@ -184,11 +207,17 @@ Key limitations:
 
 **English:**
 
-Developed a portfolio-grade IFRS 17 Term Life valuation engine in Python, designed as a transparent and challengeable actuarial engineering project with modular BEL/RA/CSM calculations, scenario analysis, diagnostics, reconciliation checks, and audit-ready JSON outputs.
+Developed a portfolio-grade IFRS 17 Term Life valuation engine in Python, designed as a
+transparent and challengeable actuarial engineering project with modular BEL/RA/CSM
+calculations, scenario analysis, diagnostics, reconciliation checks, and audit-ready JSON
+outputs.
 
 **Turkish:**
 
-Python ile portfolio-grade bir IFRS 17 Term Life valuation engine geliştirdim. Proje; BEL/RA/CSM hesaplamaları, senaryo analizleri, reconciliation kontrolleri, diagnostic raporlar ve audit-ready JSON çıktılarıyla incelenebilir ve geliştirilebilir bir aktüeryal mühendislik çalışması olarak tasarlandı.
+Python ile portfolio-grade bir IFRS 17 Term Life valuation engine geliştirdim. Proje;
+BEL/RA/CSM hesaplamaları, senaryo analizleri, reconciliation kontrolleri, diagnostic
+raporlar ve audit-ready JSON çıktılarıyla incelenebilir ve geliştirilebilir bir
+aktüeryal mühendislik çalışması olarak tasarlandı.
 
 ## Roadmap
 
@@ -209,7 +238,7 @@ Python ile portfolio-grade bir IFRS 17 Term Life valuation engine geliştirdim. 
 - [`DOCUMENTS/architecture.md`](DOCUMENTS/architecture.md)
 - [`DOCUMENTS/methodology.md`](DOCUMENTS/methodology.md)
 - [`DOCUMENTS/model_limitations.md`](DOCUMENTS/model_limitations.md)
-- [`DOCUMENTS/coverage_plan.md`](DOCUMENTS/coverage_plan.md)
+- [`docs/coverage_plan.md`](docs/coverage_plan.md)
 - [`notebooks/demo_walkthrough.ipynb`](notebooks/demo_walkthrough.ipynb)
 
 ## License
