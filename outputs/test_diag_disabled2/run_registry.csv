@@ -1,2 +1,0 @@
-﻿run_id,created_at_utc,assumption_hash,methodology_version,approval_status,projection_rows,total_bel,total_ra,total_csm_opening,total_csm_closing
-29783e3ed54341389534e56cc6a03541,2026-05-25T21:07:03.984553+00:00,ace42796bf5412baff06fb011a83d20d17b22d5f29778d82840e1982f47c6306,test,draft,2,5.0,3.0,0.0,0.0

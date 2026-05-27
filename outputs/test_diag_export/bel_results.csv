@@ -1,3 +1,0 @@
-﻿policy_id,bel_per_policy,pv_bel_outflows,pv_bel_inflows,pv_claims,pv_expenses,pv_surrender_benefits,pv_counterparty_default_cost,pv_reinsurance_ceding,pv_premiums,pv_reinsurance_recovery
-1,10.0,30.0,20.0,12.0,3.0,1.0,0.0,2.0,20.0,0.0
-2,-5.0,15.0,20.0,8.0,2.0,0.5,0.0,1.0,20.0,0.0

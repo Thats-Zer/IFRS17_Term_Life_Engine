@@ -19,6 +19,7 @@ from engine.projection import (
 )
 from engine.ra import calculate_risk_adjustment
 from engine.scenarios import run_scenarios
+from engine.validation import build_data_validation_report, write_data_validation_report
 
 
 # Configure console encoding to UTF-8 if possible
@@ -159,6 +160,20 @@ def main() -> None:
             raise EngineException(
                 "Cashflow calculation failed", step="CASHFLOWS", original=e
             ) from e
+
+        try:
+            logger.info("6a. Building data validation report")
+            validation_report = build_data_validation_report(
+                policy_input=master_data,
+                mortality_table=mortality_table,
+                discount_curve=discount_curve,
+                projection=projection,
+                cashflows=projection,
+                config=config,
+            )
+            write_data_validation_report(Path(config.output_path).parent, validation_report)
+        except Exception as e:
+            logger.warning("Data validation report could not be written: %s", e, exc_info=True)
 
         try:
             logger.info("7. Calculating BEL")

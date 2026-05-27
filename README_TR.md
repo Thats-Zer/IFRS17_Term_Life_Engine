@@ -171,10 +171,10 @@ python -m venv .venv
 .\.venv\Scripts\python.exe main.py
 ```
 
-Interaktif Streamlit demosu:
+Notebook walkthrough:
 
-```powershell
-.\.venv\Scripts\streamlit.exe run streamlit_app.py
+```text
+notebooks/demo_walkthrough.ipynb
 ```
 
 Varsayılan konfigürasyon dosyası:
@@ -226,7 +226,7 @@ Test kapsamı:
 
 ## Demo ve Sample Run
 
-Repo içinde [`streamlit_app.py`](streamlit_app.py) dosyasında küçük ve interaktif bir demo vardır. Demo aynı valuation engine'i çalıştırır ve şunları gösterir:
+Repo içinde [`notebooks/demo_walkthrough.ipynb`](notebooks/demo_walkthrough.ipynb) dosyasında küçük bir walkthrough vardır. Notebook aynı valuation engine'i çalıştırır ve şunları incelemek için kullanılabilir:
 
 - BEL, RA, CSM ve onerous loss metrikleri
 - PV inflow / outflow / net cashflow çizgi grafikleri
@@ -236,7 +236,7 @@ Repo içinde [`streamlit_app.py`](streamlit_app.py) dosyasında küçük ve inte
 - Disclosure summary tabloları
 - Audit incelemesi için BEL diagnostic JSON
 
-Örnek çıktı dosyalarının nasıl okunacağı [`DOCUMENTS/sample_run.md`](DOCUMENTS/sample_run.md) içinde özetlenmiştir.
+Reviewer incelemesi için curated/truncated örnek çıktı dosyaları [`examples/default_outputs`](examples/default_outputs) altında tutulur. `main.py` çalıştırıldığında tam runtime çıktıları yerelde `outputs/` altına yazılır; `outputs/` her çalıştırmada değiştiği için Git tarafından ignore edilir.
 
 ## İleri Demonstrasyon Katmanları
 
