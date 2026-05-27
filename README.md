@@ -287,6 +287,13 @@ aktüeryal mühendislik çalışması olarak tasarlandı.
 
 This project is licensed under the **GNU Affero General Public License v3.0 or later (AGPL-3.0-or-later)**.
 
+License summary:
+
+- Current license: AGPL-3.0-or-later
+- Commercial licensing may be available upon request
+- Earlier Apache-2.0 copies are historical only
+- This is not production IFRS 17 / regulatory reporting / legal or actuarial advice
+
 SPDX identifier:
 
 ```text

@@ -295,6 +295,13 @@ Bu proje sentetik veri ve basitleştirilmiş varsayımlar kullanır. Üretim sev
 
 Bu proje GNU Affero General Public License v3.0 or later (AGPL-3.0-or-later) kapsamında lisanslanmıştır.
 
+Lisans özeti:
+
+- Güncel lisans: AGPL-3.0-or-later
+- Ticari lisanslama talep üzerine değerlendirilebilir
+- Daha önceki Apache-2.0 kopyaları yalnızca tarihsel niteliktedir
+- Bu proje production IFRS 17 / regülasyon raporlama / hukuki veya aktüeryal tavsiye değildir
+
 SPDX identifier:
 
 ```text
