@@ -1,6 +1,0 @@
-numpy
-pandas
-pydantic>=2,<3
-scipy
-openpyxl
-pytest

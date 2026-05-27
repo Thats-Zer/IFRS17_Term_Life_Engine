@@ -1,5 +1,6 @@
+-r requirements.txt
 pytest-cov
+pytest
 ruff
 black
 mypy
-matplotlib
