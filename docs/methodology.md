@@ -230,8 +230,9 @@ Validation coverage includes:
 - Diagnostics enabled / disabled tests
 - Sample data validation tests
 - CI quality gates
+- Structured data validation reporting for policy, mortality, discount, projection, and cashflow tables
 
-Current test coverage is 79%. The stated coverage target is 90%+.
+Coverage is tracked with pytest-cov. The stated coverage target is 90%+.
 
 The tests validate key mechanics, but they do not replace actuarial model validation by qualified professionals.
 

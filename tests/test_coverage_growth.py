@@ -70,6 +70,28 @@ def _projection() -> pd.DataFrame:
     )
 
 
+def _master() -> pd.DataFrame:
+    return pd.DataFrame(
+        {
+            "policy_id": [1, 2],
+            "issue_age": [35, 45],
+            "sum_assured": [10000.0, 20000.0],
+            "coverage_years": [2, 2],
+        }
+    )
+
+
+def _csm_result() -> pd.DataFrame:
+    return pd.DataFrame(
+        {
+            "policy_id": [1, 2],
+            "csm_opening": [90.0, 0.0],
+            "csm_closing": [80.0, 0.0],
+            "onerous_loss": [0.0, 85.0],
+        }
+    )
+
+
 def test_apply_scenario_returns_updated_copy_without_mutating_base():
     config = _small_config()
 
@@ -210,22 +232,8 @@ def test_csm_rollforward_raises_when_reporting_year_has_no_release():
 def test_save_outputs_writes_csv_and_audit_json(tmp_path: Path):
     config = _small_config()
     projection = _projection()
-    master = pd.DataFrame(
-        {
-            "policy_id": [1, 2],
-            "issue_age": [35, 45],
-            "sum_assured": [10000.0, 20000.0],
-            "coverage_years": [2, 2],
-        }
-    )
-    csm = pd.DataFrame(
-        {
-            "policy_id": [1, 2],
-            "csm_opening": [90.0, 0.0],
-            "csm_closing": [80.0, 0.0],
-            "onerous_loss": [0.0, 85.0],
-        }
-    )
+    master = _master()
+    csm = _csm_result()
     diagnostics = {"total_bel": np.float32(-20.0), "top_policies": [{"policy_id": np.int64(1)}]}
 
     save_outputs(
@@ -253,6 +261,87 @@ def test_save_outputs_writes_csv_and_audit_json(tmp_path: Path):
     assert audit["row_counts"]["projection"]["rows"] == len(projection)
     assert audit["bel_diagnostics"]["total_bel"] == pytest.approx(-20.0)
     assert bel_diagnostics["top_policies"][0]["policy_id"] == 1
+
+
+def test_save_outputs_without_disclosure_package_writes_no_disclosure_files(tmp_path: Path):
+    save_outputs(
+        projection=_projection(),
+        bel_result=_bel_result(),
+        ra_result=_ra_result(),
+        csm_result=_csm_result(),
+        scenario_results=pd.DataFrame({"scenario": ["base"], "Total_BEL": [-20.0]}),
+        output_dir=str(tmp_path),
+        master=_master(),
+        excel_output=False,
+        group_result=pd.DataFrame({"group_id": ["g1"], "csm_opening": [90.0]}),
+        disclosure_package=None,
+    )
+
+    assert (tmp_path / "projection_results.csv").exists()
+    assert list(tmp_path.glob("disclosure_*.csv")) == []
+
+
+def test_save_outputs_empty_disclosure_package_writes_no_disclosure_files(tmp_path: Path):
+    save_outputs(
+        projection=_projection(),
+        bel_result=_bel_result(),
+        ra_result=_ra_result(),
+        csm_result=_csm_result(),
+        scenario_results=pd.DataFrame({"scenario": ["base"], "Total_BEL": [-20.0]}),
+        output_dir=str(tmp_path),
+        master=_master(),
+        excel_output=False,
+        group_result=pd.DataFrame({"group_id": ["g1"], "csm_opening": [90.0]}),
+        disclosure_package={},
+    )
+
+    assert (tmp_path / "projection_results.csv").exists()
+    assert list(tmp_path.glob("disclosure_*.csv")) == []
+
+
+def test_save_outputs_with_disclosure_package_writes_csv(tmp_path: Path):
+    disclosure = {"summary": pd.DataFrame({"metric": ["bel"], "value": [-20.0]})}
+
+    save_outputs(
+        projection=_projection(),
+        bel_result=_bel_result(),
+        ra_result=_ra_result(),
+        csm_result=_csm_result(),
+        scenario_results=pd.DataFrame({"scenario": ["base"], "Total_BEL": [-20.0]}),
+        output_dir=str(tmp_path),
+        master=_master(),
+        excel_output=False,
+        group_result=pd.DataFrame({"group_id": ["g1"], "csm_opening": [90.0]}),
+        disclosure_package=disclosure,
+    )
+
+    assert (tmp_path / "disclosure_summary.csv").exists()
+
+
+def test_save_outputs_with_disclosure_package_writes_excel_sheets(tmp_path: Path):
+    excel_path = tmp_path / "outputs.xlsx"
+    long_name = "very_long_disclosure_sheet_name_exceeding_excel_limit"
+    disclosure = {long_name: pd.DataFrame({"metric": ["bel"], "value": [-20.0]})}
+
+    save_outputs(
+        projection=_projection(),
+        bel_result=_bel_result(),
+        ra_result=_ra_result(),
+        csm_result=_csm_result(),
+        scenario_results=pd.DataFrame({"scenario": ["base"], "Total_BEL": [-20.0]}),
+        output_dir=str(tmp_path),
+        master=_master(),
+        excel_output=True,
+        excel_path=str(excel_path),
+        group_result=pd.DataFrame({"group_id": ["g1"], "csm_opening": [90.0]}),
+        disclosure_package=disclosure,
+    )
+
+    with pd.ExcelFile(excel_path) as workbook:
+        disclosure_sheets = [sheet for sheet in workbook.sheet_names if sheet.startswith("disc_")]
+
+    assert disclosure_sheets
+    assert all(len(sheet) <= 31 for sheet in disclosure_sheets)
 
 
 def test_save_outputs_requires_projection_and_master(tmp_path: Path):

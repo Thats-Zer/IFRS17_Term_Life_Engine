@@ -66,10 +66,10 @@ Run tests:
 .\.venv\Scripts\python.exe -m pytest
 ```
 
-Run the interactive Streamlit demo:
+Open the notebook walkthrough:
 
-```powershell
-.\.venv\Scripts\streamlit.exe run streamlit_app.py
+```text
+notebooks/demo_walkthrough.ipynb
 ```
 
 Run quality checks:
@@ -99,7 +99,7 @@ flowchart LR
     I --> H
 ```
 
-See [`DOCUMENTS/architecture.md`](DOCUMENTS/architecture.md) for detailed architecture notes.
+See [`docs/architecture.md`](docs/architecture.md) for detailed architecture notes.
 
 ## Technical Highlights
 
@@ -138,14 +138,15 @@ The engine writes audit-oriented JSON outputs:
 
 - `bel_diagnostics.json`: BEL diagnostic summary for reviewer inspection
 - `audit_report.json`: assumption hash, row counts, reconciliation totals, diagnostics, and run metadata
+- `data_validation_report.json`: structured input and intermediate-table validation findings
 
 Base BEL diagnostics are captured explicitly after the base BEL calculation and passed to
 the output layer. Scenario runs disable diagnostics by default so the base diagnostic
 summary is protected from scenario overwrite risk.
 
-## Interactive Demo and Sample Run
+## Demo and Sample Run
 
-The repository includes a Streamlit demo in [`streamlit_app.py`](streamlit_app.py). It runs the same valuation engine with a small configurable portfolio and renders:
+The repository includes a notebook walkthrough in [`notebooks/demo_walkthrough.ipynb`](notebooks/demo_walkthrough.ipynb). It uses the valuation engine with a small configurable portfolio and can be used to inspect:
 
 - BEL, RA, CSM, and onerous loss metrics
 - PV inflow / outflow / net cashflow line charts
@@ -155,7 +156,11 @@ The repository includes a Streamlit demo in [`streamlit_app.py`](streamlit_app.p
 - Disclosure summary tables
 - BEL diagnostic JSON for audit review
 
-Sample run outputs are described in [`DOCUMENTS/sample_run.md`](DOCUMENTS/sample_run.md).
+Curated example outputs for reviewer inspection are provided under [`examples/default_outputs`](examples/default_outputs).
+
+## Default Example Outputs
+
+Tracked curated/truncated example outputs are available under [`examples/default_outputs`](examples/default_outputs) for reviewer inspection. Running `main.py` writes full fresh runtime outputs to `outputs/`, which is ignored by Git because those files change on each run.
 
 ```mermaid
 xychart-beta
@@ -178,10 +183,12 @@ engine can optionally load external policy input through `sample_policy_path` in
 config.
 
 Input validation checks required fields, unique policy IDs, non-negative sum assured,
-valid issue ages, positive coverage years, and missing values.
+valid issue ages, positive coverage years, missing values, infinite values, mortality
+rates, lapse rates, and discount factors. A structured data validation report is written
+to `outputs/data_validation_report.json` for reviewer inspection.
 
-Data lineage is covered in [`DOCUMENTS/methodology.md`](DOCUMENTS/methodology.md) and
-[`DOCUMENTS/architecture.md`](DOCUMENTS/architecture.md).
+Data lineage is covered in [`docs/methodology.md`](docs/methodology.md) and
+[`docs/architecture.md`](docs/architecture.md).
 
 ## Advanced Demonstration Layers
 
@@ -232,7 +239,7 @@ improved.
 
 ## Limitations
 
-See [`DOCUMENTS/model_limitations.md`](DOCUMENTS/model_limitations.md) for the full limitations statement.
+See [`docs/model_limitations.md`](docs/model_limitations.md) for the full limitations statement.
 
 Key limitations:
 
@@ -276,11 +283,11 @@ aktüeryal mühendislik çalışması olarak tasarlandı.
 
 ## Documentation
 
-- [`DOCUMENTS/architecture.md`](DOCUMENTS/architecture.md)
-- [`DOCUMENTS/methodology.md`](DOCUMENTS/methodology.md)
-- [`DOCUMENTS/model_limitations.md`](DOCUMENTS/model_limitations.md)
-- [`DOCUMENTS/coverage_plan.md`](DOCUMENTS/coverage_plan.md)
-- [`DOCUMENTS/sample_run.md`](DOCUMENTS/sample_run.md)
+- [`docs/architecture.md`](docs/architecture.md)
+- [`docs/methodology.md`](docs/methodology.md)
+- [`docs/model_limitations.md`](docs/model_limitations.md)
+- [`docs/coverage_plan.md`](docs/coverage_plan.md)
+- [`DOCUMENTS/ACTUARIAL_METHODOLOGY_VALIDATION_REPORT.md`](DOCUMENTS/ACTUARIAL_METHODOLOGY_VALIDATION_REPORT.md)
 - [`notebooks/demo_walkthrough.ipynb`](notebooks/demo_walkthrough.ipynb)
 
 ## License

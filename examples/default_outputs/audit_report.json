@@ -1,0 +1,105 @@
+{
+  "approval_status": "development",
+  "assumption_hash": "b495f3cf2cb61cfdf58da98af0f732d29f79af5d1d7bdf8210d8ac73d29738bf",
+  "assumptions": {
+    "acquisition_cost": 500.0,
+    "admin_cost_per_policy": 100.0,
+    "approval_status": "development",
+    "base_mort_rate": 0.001,
+    "coc_ratio": 0.05,
+    "collection_cost_rate": 0.02,
+    "confidence_level": 0.95,
+    "contingency_loading": 0.05,
+    "counterparty_lgd": 0.6,
+    "counterparty_pd": 0.005,
+    "coverage_years": 10,
+    "discount_rate": 0.05,
+    "discount_rate_shift": 0.0,
+    "excel_output": true,
+    "inflation_rate": 0.05,
+    "issue_year": 2026,
+    "lapse_base_rate": 0.1,
+    "lapse_decay": 0.15,
+    "lapse_initial_rate_multiplier": 1.0,
+    "locked_in_discount_rate": null,
+    "maintenance_cost_per_policy": 50.0,
+    "max_issue_age": 55,
+    "methodology_version": "ifrs17-term-life-educational-v1",
+    "min_issue_age": 18,
+    "mortality_age_factor": 0.0001,
+    "mortality_shock": 0.0005,
+    "mortality_shock_multiplier": 1.0,
+    "mortality_table_path": "data/mortality_table.csv",
+    "n_policies": 100000,
+    "n_risk_scenarios": 1000,
+    "op_risk_ratio": 0.02,
+    "output_path": "outputs/ifrs17_term_life_projection.xlsx",
+    "portfolio_id": "TERM_LIFE",
+    "premium_margin": 1.2,
+    "profit_margin": 0.2,
+    "projection_years": 10,
+    "ra_expense_sigma": 0.1,
+    "ra_lapse_sigma": 0.15,
+    "ra_mortality_sigma": 0.1,
+    "random_seed": 11,
+    "reinsurance_cost": 0.4,
+    "reinsurance_cost_rate": 0.4,
+    "reporting_year": 1,
+    "run_scenarios": true,
+    "s2_margin": 0.25,
+    "scenario_max_workers": 1,
+    "surrender_charge_rate": 0.1,
+    "target_avg_sum_assured": 50000.0,
+    "tax_rate": 0.2,
+    "unit_cost": 1000.0,
+    "unit_expense_multiplier": 1.0,
+    "use_float64": true,
+    "use_mortality_table": true
+  },
+  "created_at_utc": "2026-05-21T15:54:33.175506+00:00",
+  "data_lineage": {
+    "config_path": "config/config.json",
+    "mortality_table_path": "data/mortality_table.csv",
+    "output_path": "outputs/ifrs17_term_life_projection.xlsx"
+  },
+  "locked_in_discount_rate": null,
+  "methodology_version": "ifrs17-term-life-educational-v1",
+  "reconciliation_totals": {
+    "total_bel": 6936757.458115799,
+    "total_csm_closing": 9282023.29023519,
+    "total_csm_opening": 10171173.907805797,
+    "total_onerous_loss": 17938111.313682176,
+    "total_ra": 830179.9375
+  },
+  "row_counts": {
+    "bel": {
+      "columns": 5,
+      "rows": 100000
+    },
+    "csm": {
+      "columns": 13,
+      "rows": 100000
+    },
+    "groups": {
+      "columns": 15,
+      "rows": 6
+    },
+    "master": {
+      "columns": 6,
+      "rows": 100000
+    },
+    "projection": {
+      "columns": 53,
+      "rows": 1000000
+    },
+    "ra": {
+      "columns": 2,
+      "rows": 100000
+    },
+    "scenarios": {
+      "columns": 8,
+      "rows": 5
+    }
+  },
+  "run_id": "af1fd2be7ad54cb98bff48b463627759"
+}

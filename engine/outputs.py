@@ -159,6 +159,7 @@ def save_outputs(
     group_result: Optional[pd.DataFrame] = None,
     config: Optional[Any] = None,
     bel_diagnostics: Optional[dict[str, Any]] = None,
+    disclosure_package: Optional[dict[str, pd.DataFrame]] = None,
 ) -> None:
     """Persist engine outputs to CSV, optional Excel, and optional audit JSON."""
     if projection is None:
@@ -176,6 +177,9 @@ def save_outputs(
     _write_csv(output_path, "csm_results.csv", csm_result)
     _write_csv(output_path, "scenario_results.csv", scenario_results)
     _write_csv(output_path, "group_results.csv", group_result)
+    if disclosure_package:
+        for name, df in disclosure_package.items():
+            _write_csv(output_path, f"disclosure_{name}.csv", df)
 
     if config is not None:
         _write_audit_files(
@@ -211,6 +215,9 @@ def save_outputs(
             _write_excel_safe(writer, csm_result, "csm")
             _write_excel_safe(writer, group_result, "groups")
             _write_excel_safe(writer, scenario_results, "scenarios")
+            if disclosure_package:
+                for name, df in disclosure_package.items():
+                    _write_excel_safe(writer, df, f"disc_{name}"[:31])
         logger.info("Excel outputs saved: %s", excel_file)
     except ModuleNotFoundError as e:
         logger.warning("Excel export skipped (missing dependency): %s", e)

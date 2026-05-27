@@ -57,9 +57,11 @@ Operational boundaries include:
 
 ## 5. Validation Limitations
 
-Current test coverage is 79%. The target is 90%+.
+Coverage is tracked with pytest-cov. The target is 90%+.
 
 The automated tests validate key mechanics, including projection, discount timing, BEL reconciliation, CSM logic, diagnostics, sample data handling, and quality gates.
+
+The engine writes a structured data validation report for review, but this report is not a substitute for insurer-grade data governance, independent actuarial validation, or regulatory reporting controls.
 
 The tests do not replace full actuarial model validation by qualified professionals.
 
