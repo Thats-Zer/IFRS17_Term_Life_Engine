@@ -34,6 +34,7 @@ Temel amacı **CV/portföy** seviyesinde IFRS 17 muhakemesini, aktüeryal modell
 - Portföy, yıllık kohort, kârlılık grubu ve risk grubu bazında IFRS 17 tarzı gruplama yapar.
 - Mortalite, lapse, gider ve iskonto oranı şokları gibi senaryo analizleri çalıştırır.
 - CSV, Excel, audit report, assumption snapshot, BEL diagnostics ve run registry çıktıları üretir.
+- Reinsurance held, transition summary, disclosure package ve calibration helper katmanları içerir.
 - Hesaplama kimlikleri ve aktüeryal mantık için otomatik testler içerir.
 
 ## Bu Proje Nedir?
@@ -117,6 +118,7 @@ engine/grouping.py     IFRS 17 tarzı gruplama ve onerous sınıflandırma
 engine/scenarios.py    Senaryo analizi
 engine/outputs.py      CSV, Excel, audit ve registry çıktıları
 engine/audit.py        Varsayım snapshot, audit report ve run metadata
+```
 
 ## Teknik Öne Çıkanlar
 
@@ -129,6 +131,7 @@ engine/audit.py        Varsayım snapshot, audit report ve run metadata
 - **deterministik assumption snapshot / hash**
 - **senaryo analizi**
 - **opsiyonel BEL diagnostics**
+- **calibration / reinsurance held / transition / disclosure helper modülleri**
 
 ### BEL Öne Çıkanlar
 
@@ -149,7 +152,6 @@ engine/audit.py        Varsayım snapshot, audit report ve run metadata
 - **Diagnostics:** build_bel_diagnostic_summary(), _report_bel_diagnostics(), get_last_bel_diagnostic_summary()
 - **Audit JSON çıktıları:** audit_report.json, bel_diagnostics.json
 - **Governance geliştirmesi:** Base BEL diagnostics senaryo overwrite riskine karşı açıkça korunur
-```
 
 ## Kurulum
 
@@ -158,13 +160,21 @@ Windows PowerShell:
 ```powershell
 git clone https://github.com/Thats-Zer/IFRS17_Term_Life_Engine.git
 cd IFRS17_Term_Life_Engine
-python -m pip install -r requirements
+python -m venv .venv
+.\.venv\Scripts\python.exe -m pip install -r requirements.txt
+.\.venv\Scripts\python.exe -m pip install -r requirements-dev.txt
 ```
 
 ## Çalıştırma
 
 ```powershell
-python main.py
+.\.venv\Scripts\python.exe main.py
+```
+
+Interaktif Streamlit demosu:
+
+```powershell
+.\.venv\Scripts\streamlit.exe run streamlit_app.py
 ```
 
 Varsayılan konfigürasyon dosyası:
@@ -197,7 +207,7 @@ run_registry.csv
 ## Testler
 
 ```powershell
-python -m pytest -q
+.\.venv\Scripts\python.exe -m pytest -q
 ```
 
 Test kapsamı:
@@ -213,6 +223,29 @@ Test kapsamı:
 - audit snapshot ve run registry kontrolleri
 - diagnostics kapalıyken davranış kontrolleri
 - base diagnostics sahipliği (senaryo overwrite kontrolü)
+
+## Demo ve Sample Run
+
+Repo içinde [`streamlit_app.py`](streamlit_app.py) dosyasında küçük ve interaktif bir demo vardır. Demo aynı valuation engine'i çalıştırır ve şunları gösterir:
+
+- BEL, RA, CSM ve onerous loss metrikleri
+- PV inflow / outflow / net cashflow çizgi grafikleri
+- Senaryo karşılaştırma bar grafikleri
+- IFRS 17 tarzı gruplama çıktısı
+- Reinsurance held ve transition summary tabloları
+- Disclosure summary tabloları
+- Audit incelemesi için BEL diagnostic JSON
+
+Örnek çıktı dosyalarının nasıl okunacağı [`DOCUMENTS/sample_run.md`](DOCUMENTS/sample_run.md) içinde özetlenmiştir.
+
+## İleri Demonstrasyon Katmanları
+
+Production IFRS 17 sistemi iddiası kurmadan, mülakatta tartışılabilecek ileri konular için küçük ve test edilebilir modüller eklendi:
+
+- `engine/calibration.py`: deneyim verisinden credibility-weighted mortalite, lapse ve gider çarpanları
+- `engine/reinsurance.py`: basitleştirilmiş reinsurance held BEL / RA / CSM görünümü
+- `engine/transition.py`: transition yaklaşımı için özet tablo
+- `engine/disclosures.py`: summary, group, scenario, transition ve reinsurance held disclosure tabloları
 
 ## Diagnostics ve Governance
 
@@ -260,4 +293,26 @@ Bu proje sentetik veri ve basitleştirilmiş varsayımlar kullanır. Üretim sev
 
 ## Lisans
 
-Detaylar için `LICENSE` dosyasına bakınız.
+Bu proje GNU Affero General Public License v3.0 or later (AGPL-3.0-or-later) kapsamında lisanslanmıştır.
+
+SPDX identifier:
+
+```text
+AGPL-3.0-or-later
+```
+
+Ticari lisanslama ayrıca değerlendirilebilir. Bu projeyi AGPL yükümlülüklerine tabi olmadan kapalı kaynak, ticari, proprietary veya hosted/SaaS bir bağlamda kullanmak istiyorsanız, ayrı bir ticari lisans için proje sahibiyle iletişime geçebilirsiniz.
+
+Bu reponun daha önceki public kopyaları Apache-2.0 kapsamında yayınlanmış olabilir. Güncel sürüm AGPL-3.0-or-later kapsamındadır. Bu lisans değişikliği, daha önce verilmiş hakları geri almaz.
+
+Bu repo eğitim / portfolio-grade aktüeryal mühendislik çalışmasıdır. Production IFRS 17 sistemi değildir, regülasyon raporlama aracı değildir ve resmi aktüeryal, muhasebesel, hukuki veya finansal tavsiye niteliği taşımaz.
+
+Aksi açıkça belirtilmedikçe marka öğeleri, logolar, ekran görüntüleri, sunum materyalleri ve kod dışı varlıklar sınırsız ticari kullanım için lisanslanmış sayılmaz.
+
+## Kod dışı varlıkların lisanslanması
+
+Aksi açıkça belirtilmedikçe:
+
+- Kaynak kod AGPL-3.0-or-later kapsamında lisanslanır.
+- Dokümantasyon, metodoloji notları, sentetik portföyler, ekran görüntüleri, demo materyalleri ve diğer kod dışı varlıklar ayrıca kısıtlamalara tabi olabilir ve sınırsız ticari kullanım için lisanslanmış sayılmaz.
+- Genişletilmiş Excel reconciliation template'leri, ticari reporting pack'leri, proprietary adapter'lar ve high-performance component'ler açık kaynak lisansa dahil değildir; ayrıca izin veya ticari anlaşma gerektirebilir.

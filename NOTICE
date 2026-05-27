@@ -1,0 +1,12 @@
+IFRS 17 Term Life Valuation Engine
+
+Copyright (c) 2026 Şevval Zerda Höçük
+
+Current project license:
+GNU Affero General Public License v3.0 or later (AGPL-3.0-or-later)
+
+Earlier public copies of this repository may have been available under Apache-2.0. The current version is licensed under AGPL-3.0-or-later. This licensing change does not revoke rights that were already granted for those earlier copies.
+
+Third-party dependencies may be distributed under their own licenses. Those third-party licenses remain the responsibility of their respective authors and are not changed by this project's license.
+
+This project is an educational / portfolio-grade actuarial engineering project and is not intended as production IFRS 17 software or regulatory reporting software.

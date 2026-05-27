@@ -6,7 +6,7 @@
 
 This is a Python-based modular actuarial valuation engine for Term Life insurance under a
 simplified IFRS 17 framework. It covers projection, cashflows, BEL, RA, CSM, grouping,
-scenarios, and outputs/audit.
+scenarios, reinsurance held, transition summaries, disclosure tables, and outputs/audit.
 
 The project is a portfolio-grade CV project. It is intended to demonstrate actuarial
 engineering, model governance awareness, auditability, and testable Python design. It is
@@ -37,6 +37,7 @@ The goal is not to provide a production IFRS 17 system. The goal is to make the 
 - A learning-oriented and challengeable model
 - A configurable educational IFRS 17 valuation sandbox
 - A demonstration of model governance and auditability
+- A reviewer-friendly demo of calibration, reinsurance held, transition, and disclosure summaries
 
 ## What This Project Is Not
 
@@ -63,6 +64,12 @@ Run tests:
 
 ```powershell
 .\.venv\Scripts\python.exe -m pytest
+```
+
+Run the interactive Streamlit demo:
+
+```powershell
+.\.venv\Scripts\streamlit.exe run streamlit_app.py
 ```
 
 Run quality checks:
@@ -101,11 +108,13 @@ See [`DOCUMENTS/architecture.md`](DOCUMENTS/architecture.md) for detailed archit
 - **pytest** validation suite for core mechanics and regression checks
 - **GitHub Actions CI/CD** for automated quality gates
 - **Ruff / Black / Mypy** for linting, formatting, and static type checks
-- **Current coverage: 79%**, with a documented target of **90%+**
+- **pytest-cov coverage tracking**, with a documented target of **90%+**
 - **Benchmark tooling** through `scripts/benchmark_engine.py`
 - **Sample data validation** for optional external policy input
 - **Audit JSON outputs** including assumption snapshots, audit reports, and run metadata
 - **BEL diagnostics** for explainability and reconciliation review
+- **Disclosure package helpers** for summary, group, scenario, transition, and reinsurance held views
+- **Experience calibration helper** for credibility-weighted assumption multipliers
 
 ## BEL Diagnostics and Audit Outputs
 
@@ -134,6 +143,28 @@ Base BEL diagnostics are captured explicitly after the base BEL calculation and 
 the output layer. Scenario runs disable diagnostics by default so the base diagnostic
 summary is protected from scenario overwrite risk.
 
+## Interactive Demo and Sample Run
+
+The repository includes a Streamlit demo in [`streamlit_app.py`](streamlit_app.py). It runs the same valuation engine with a small configurable portfolio and renders:
+
+- BEL, RA, CSM, and onerous loss metrics
+- PV inflow / outflow / net cashflow line charts
+- Scenario comparison bar charts
+- IFRS 17-style grouping output
+- Reinsurance held and transition summary tables
+- Disclosure summary tables
+- BEL diagnostic JSON for audit review
+
+Sample run outputs are described in [`DOCUMENTS/sample_run.md`](DOCUMENTS/sample_run.md).
+
+```mermaid
+xychart-beta
+    title "Illustrative Scenario Comparison"
+    x-axis ["base", "mortality +10%", "lapse +20%", "expense +15%", "rate -100bps"]
+    y-axis "Relative BEL Index" 80 --> 130
+    bar [100, 108, 96, 103, 118]
+```
+
 ## Sample Data and Data Lineage
 
 Sample synthetic data is provided under `data/sample`:
@@ -151,6 +182,17 @@ valid issue ages, positive coverage years, and missing values.
 
 Data lineage is covered in [`DOCUMENTS/methodology.md`](DOCUMENTS/methodology.md) and
 [`DOCUMENTS/architecture.md`](DOCUMENTS/architecture.md).
+
+## Advanced Demonstration Layers
+
+The project includes small, inspectable modules for topics that would be much larger in a production IFRS 17 implementation:
+
+- `engine/calibration.py`: credibility-weighted mortality, lapse, and expense multipliers from experience data
+- `engine/reinsurance.py`: simplified reinsurance held BEL / RA / CSM view
+- `engine/transition.py`: compact transition summary for full retrospective, modified retrospective, or fair-value-style review
+- `engine/disclosures.py`: reviewer-friendly disclosure package tables
+
+These modules are intentionally transparent and testable. They demonstrate the direction of production concepts without claiming to replace a formally governed insurer implementation.
 
 ## Performance Benchmark
 
@@ -221,26 +263,48 @@ aktüeryal mühendislik çalışması olarak tasarlandı.
 
 ## Roadmap
 
-- Coverage toward 90%+
-- Streamlit or notebook demo
+- Coverage beyond current 90%
+- Streamlit demo enhancements
 - Richer coverage units
 - Assumption unlocking
-- Transition approach
 - Cohort-level CSM
-- Reinsurance held measurement
 - Expanded RA methodology, including confidence-level and cost-of-capital alternatives
 - Real or publicly documented experience study calibration for mortality, lapse, expense, and premium assumptions
 - Benchmark results
 - Deeper data lineage documentation
+- Formal financial statement disclosure package
 
 ## Documentation
 
 - [`DOCUMENTS/architecture.md`](DOCUMENTS/architecture.md)
 - [`DOCUMENTS/methodology.md`](DOCUMENTS/methodology.md)
 - [`DOCUMENTS/model_limitations.md`](DOCUMENTS/model_limitations.md)
-- [`docs/coverage_plan.md`](docs/coverage_plan.md)
+- [`DOCUMENTS/coverage_plan.md`](DOCUMENTS/coverage_plan.md)
+- [`DOCUMENTS/sample_run.md`](DOCUMENTS/sample_run.md)
 - [`notebooks/demo_walkthrough.ipynb`](notebooks/demo_walkthrough.ipynb)
 
 ## License
 
-See [`LICENSE`](LICENSE).
+This project is licensed under the **GNU Affero General Public License v3.0 or later (AGPL-3.0-or-later)**.
+
+SPDX identifier:
+
+```text
+AGPL-3.0-or-later
+```
+
+Commercial licensing may be available upon request. If you want to use this project in a proprietary, closed-source, commercial, or hosted/SaaS context without complying with AGPL obligations, please contact the author to discuss a separate commercial license.
+
+Earlier public copies of this repository may have been available under Apache-2.0. The current version is licensed under AGPL-3.0-or-later. This licensing change does not revoke rights that were already granted for those earlier copies.
+
+This repository is an educational / portfolio-grade actuarial engineering project. It is not a production IFRS 17 system, not a regulatory reporting tool, and not official actuarial, accounting, legal, or financial advice.
+
+Unless explicitly stated otherwise, branding, logos, screenshots, presentation materials, and non-code assets are not granted for unrestricted commercial reuse.
+
+## Licensing of non-code assets
+
+Unless explicitly stated otherwise:
+
+- Source code is licensed under AGPL-3.0-or-later.
+- Documentation, methodology notes, synthetic portfolios, screenshots, demo materials, and other non-code assets may be subject to separate restrictions and are not granted for unrestricted commercial reuse.
+- Extended Excel reconciliation templates, commercial reporting packs, proprietary adapters, and high-performance components are not included in the open-source license unless explicitly stated and may require separate permission or a commercial agreement.
