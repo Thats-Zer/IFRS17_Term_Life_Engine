@@ -44,6 +44,20 @@ Known methodological boundaries include:
 
 These choices are intentional so the model remains reviewable and technically challengeable.
 
+# 3.1 Additional Methodology Limitations Based on Reviewer Feedback
+
+The current version is intentionally simplified and does not aim to represent a full production IFRS 17 implementation. Based on reviewer and practitioner feedback, the following areas are acknowledged as important methodology limitations and future improvement points:
+
+- CSM roll-forward: The current CSM treatment is simplified and does not yet fully model the movement from opening CSM to closing CSM across valuation periods.
+- Group-level CSM / loss component classification: CSM and loss component classification should be determined at IFRS 17 group level. The current implementation may still use simplified policy-level logic in some areas for educational transparency.
+- Valuation year structure: The model requires a clearer distinction between valuation year, calendar year, policy year, issue year, and portfolio state.
+- Locked-in rates for CSM: The treatment of discount rates is simplified. A more complete IFRS 17 model should handle locked-in rates for CSM measurement where applicable.
+- Experience and assumption variance: Experience variance, assumption variance, model point updates, and projection reruns are not yet separated in a fully production-like way.
+- Coverage units and CSM release: Coverage unit methodology and CSM release mechanics are simplified and require further development.
+- Grouping policy: Grouping is currently implemented as an educational demonstration and does not represent a fully governed insurer grouping policy.
+
+These limitations are documented intentionally. The purpose of this project is to make the actuarial logic visible, reviewable, and challengeable, rather than to claim production-level IFRS 17 compliance.
+
 ## 4. Operational Limitations
 
 The engine is not performance-certified for production use.
