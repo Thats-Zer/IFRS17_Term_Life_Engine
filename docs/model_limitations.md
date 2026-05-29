@@ -44,7 +44,7 @@ Known methodological boundaries include:
 
 These choices are intentional so the model remains reviewable and technically challengeable.
 
-# 3.1 Additional Methodology Limitations Based on Reviewer Feedback
+### 3.1 Additional Methodology Limitations Based on Reviewer Feedback
 
 The current version is intentionally simplified and does not aim to represent a full production IFRS 17 implementation. Based on reviewer and practitioner feedback, the following areas are acknowledged as important methodology limitations and future improvement points:
 
