@@ -47,6 +47,23 @@ The goal is not to provide a production IFRS 17 system. The goal is to make the 
 - Not a replacement for company-grade IFRS 17 models
 - Not calibrated to real company data by default
 
+## Feedback-Based Roadmap
+
+After sharing this project with actuarial communities and receiving practitioner feedback, the next development phase will focus less on adding more features and more on improving methodology, structure, and design clarity.
+
+Planned improvements include:
+
+- Full CSM roll-forward from opening balance to closing balance across valuation periods
+- Group-level CSM / loss component classification instead of simplified policy-level classification
+- Clearer separation of valuation year, calendar year, policy year, issue year, and portfolio state
+- Locked-in discount-rate handling for CSM measurement where applicable
+- Cleaner separation between projection, measurement, grouping, assumption changes, experience variance, and reporting
+- More robust coverage-unit methodology and CSM release mechanics
+- Better documentation of methodology limitations and design decisions
+
+The current version remains an educational, portfolio-grade IFRS 17 valuation sandbox. This roadmap is intended to make the next version more methodologically coherent, easier to review, and closer to how IFRS 17 modelling concepts are discussed in practice.
+
+
 ## Quickstart
 
 Windows PowerShell:
